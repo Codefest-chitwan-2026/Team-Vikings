@@ -40,9 +40,11 @@ INSTALLED_APPS = [
 
     # created apps
     "rest_framework",
+    "rest_framework_simplejwt",
     'users',
     'profiles',
     'authentication',
+    'donations',
     "rest_framework_simplejwt.token_blacklist",
 ]
 
