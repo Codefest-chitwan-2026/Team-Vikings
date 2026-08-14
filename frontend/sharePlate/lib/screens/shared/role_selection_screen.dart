@@ -3,6 +3,7 @@ import '../../core/constants/app_colors.dart';
 import '../../models/user_model.dart';
 import '../../widgets/role_selection/info_banner.dart';
 import '../../widgets/role_selection/role_card.dart';
+import 'login_screen.dart';
 
 class RoleSelectionScreen extends StatefulWidget {
   const RoleSelectionScreen({super.key});
@@ -26,7 +27,11 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen> {
   }
 
   void _onContinue() {
-    // Navigates to Login/Register screen
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => LoginScreen(role: _selectedRole),
+      ),
+    );
   }
 
   @override
