@@ -1,7 +1,4 @@
 from django.shortcuts import render
-
-# Create your views here.
-
 from rest_framework import viewsets, status
 from rest_framework.response import Response
 from rest_framework.permissions import AllowAny, IsAdminUser
@@ -220,3 +217,22 @@ class NGOProfileViewSet(viewsets.ModelViewSet):
             },
             status=status.HTTP_201_CREATED
         )
+
+
+# user models register 
+
+from rest_framework.permissions import AllowAny, IsAdminUser
+from users.models import User
+from users.serializers import UserSerializer
+
+
+class UserRegisterViewSet(viewsets.ModelViewSet):
+
+    queryset = User.objects.all()
+    serializer_class = UserSerializer
+
+    def get_permissions(self):
+        if self.action == "create":
+            return [AllowAny()]
+
+        return [IsAdminUser()]
