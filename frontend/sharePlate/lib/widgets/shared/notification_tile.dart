@@ -86,7 +86,7 @@ class NotificationListView extends StatelessWidget {
     return ListView.separated(
       padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
       itemCount: items.length,
-      separatorBuilder: (_, __) => const Divider(height: 1, color: AppColors.border),
+      separatorBuilder: (_, _) => const Divider(height: 1, color: AppColors.border),
       itemBuilder: (context, index) => NotificationTile(item: items[index]),
     );
   }

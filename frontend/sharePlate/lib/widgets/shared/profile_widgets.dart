@@ -1,45 +1,55 @@
+import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../../core/constants/app_colors.dart';
 
-/// Circular initials avatar + name + subtitle block at the top of every
-/// role's Profile screen.
+/// Circular avatar (with image or initials fallback) + name + subtitle
+/// block at the top of every role's Profile screen.
 class ProfileHeader extends StatelessWidget {
   const ProfileHeader({
     super.key,
     required this.initials,
     required this.name,
     required this.subtitle,
+    this.avatarPath,
   });
 
   final String initials;
   final String name;
   final String subtitle;
+  final String? avatarPath;
 
   @override
   Widget build(BuildContext context) {
+    final hasImage = avatarPath != null && avatarPath!.isNotEmpty;
+    final isLocalFile = hasImage && !kIsWeb && File(avatarPath!).existsSync();
+
     return Column(
       children: [
         Container(
-          width: 72,
-          height: 72,
+          width: 76,
+          height: 76,
           decoration: const BoxDecoration(
             color: AppColors.cardLightBg,
             shape: BoxShape.circle,
           ),
+          clipBehavior: Clip.antiAlias,
           alignment: Alignment.center,
-          child: Text(
-            initials,
-            style: const TextStyle(
-              fontSize: 22,
-              fontWeight: FontWeight.bold,
-              color: AppColors.primary,
-            ),
-          ),
+          child: isLocalFile
+              ? Image.file(
+                  File(avatarPath!),
+                  width: 76,
+                  height: 76,
+                  fit: BoxFit.cover,
+                  errorBuilder: (context, error, stackTrace) => _initialsWidget(),
+                )
+              : _initialsWidget(),
         ),
         const SizedBox(height: 12),
         Text(
           name,
+          textAlign: TextAlign.center,
           style: const TextStyle(
             fontSize: 18,
             fontWeight: FontWeight.bold,
@@ -49,71 +59,29 @@ class ProfileHeader extends StatelessWidget {
         const SizedBox(height: 2),
         Text(
           subtitle,
+          textAlign: TextAlign.center,
           style: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
         ),
       ],
     );
   }
-}
 
-class ProfileStat {
-  const ProfileStat({required this.value, required this.label});
-
-  final String value;
-  final String label;
-}
-
-/// The "#67 Rank / 500 Donations / 1000 Points" style row.
-class ProfileStatsBar extends StatelessWidget {
-  const ProfileStatsBar({super.key, required this.stats});
-
-  final List<ProfileStat> stats;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 16),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppColors.border),
-      ),
-      child: Row(
-        children: List.generate(stats.length * 2 - 1, (i) {
-          if (i.isOdd) {
-            return const SizedBox(
-              height: 32,
-              child: VerticalDivider(width: 1, color: AppColors.border),
-            );
-          }
-          final stat = stats[i ~/ 2];
-          return Expanded(
-            child: Column(
-              children: [
-                Text(
-                  stat.value,
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.textPrimary,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  stat.label,
-                  style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
-                ),
-              ],
-            ),
-          );
-        }),
+  Widget _initialsWidget() {
+    return Center(
+      child: Text(
+        initials,
+        style: const TextStyle(
+          fontSize: 24,
+          fontWeight: FontWeight.bold,
+          color: AppColors.primary,
+        ),
       ),
     );
   }
 }
 
 /// A single row in the profile menu list (e.g. "Edit profile",
-/// "Saved addresses", "Log out").
+/// "Verification documents", "Saved addresses", "Log out").
 class ProfileMenuTile extends StatelessWidget {
   const ProfileMenuTile({
     super.key,

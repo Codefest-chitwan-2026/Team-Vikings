@@ -23,16 +23,27 @@ class BusinessRegistrationModel {
     this.verificationDocumentPath,
   });
 
+  Map<String, String> toFormFields() => {
+        'phone_num': phoneNumber.trim(),
+        'email': email.trim(),
+        'password': password,
+        'business_name': businessName.trim(),
+        'registration_number': registrationOrPanNumber.trim(),
+        'address': addressText.trim(),
+        if (latitude != null) 'latitude': latitude.toString(),
+        if (longitude != null) 'longitude': longitude.toString(),
+      };
+
   Map<String, dynamic> toJson() => {
-    'business_name': businessName,
-    'contact_name': contactName,
-    'phone_number': phoneNumber,
-    'email': email,
-    'password': password,
-    'address_text': addressText,
-    'registration_or_pan_number': registrationOrPanNumber,
-    'latitude': latitude,
-    'longitude': longitude,
-    'verification_document_path': verificationDocumentPath,
-  };
+        'business_name': businessName,
+        'contact_name': contactName,
+        'phone_number': phoneNumber,
+        'email': email,
+        'password': password,
+        'address_text': addressText,
+        'registration_or_pan_number': registrationOrPanNumber,
+        'latitude': latitude,
+        'longitude': longitude,
+        'verification_document_path': verificationDocumentPath,
+      };
 }

@@ -48,6 +48,9 @@ class VerificationDocumentModel {
     this.issuedIdNumber,
     this.reviewNote,
     this.previewAssetPath,
+    this.localFilePath,
+    this.photoUrl,
+    this.issuerAuthority,
   });
 
   final String id;
@@ -70,7 +73,111 @@ class VerificationDocumentModel {
   /// Reviewer note, mainly used when [status] is rejected.
   final String? reviewNote;
 
-  /// Optional path to a real preview image, once documents are actually
-  /// stored/served by the backend. Null falls back to a placeholder.
+  /// Optional path to a bundled preview asset.
   final String? previewAssetPath;
+
+  /// Optional path to a picked local file on the device filesystem.
+  final String? localFilePath;
+
+  /// Optional remote URL for hosted document photos.
+  final String? photoUrl;
+
+  /// Issuing body e.g. "Government of Nepal · Company Registrar's Office"
+  final String? issuerAuthority;
+
+  VerificationDocumentModel copyWith({
+    String? id,
+    String? title,
+    String? fileName,
+    VerificationDocumentType? type,
+    VerificationDocumentStatus? status,
+    DateTime? submittedOn,
+    String? issuedIdNumber,
+    String? reviewNote,
+    String? previewAssetPath,
+    String? localFilePath,
+    String? photoUrl,
+    String? issuerAuthority,
+  }) {
+    return VerificationDocumentModel(
+      id: id ?? this.id,
+      title: title ?? this.title,
+      fileName: fileName ?? this.fileName,
+      type: type ?? this.type,
+      status: status ?? this.status,
+      submittedOn: submittedOn ?? this.submittedOn,
+      issuedIdNumber: issuedIdNumber ?? this.issuedIdNumber,
+      reviewNote: reviewNote ?? this.reviewNote,
+      previewAssetPath: previewAssetPath ?? this.previewAssetPath,
+      localFilePath: localFilePath ?? this.localFilePath,
+      photoUrl: photoUrl ?? this.photoUrl,
+      issuerAuthority: issuerAuthority ?? this.issuerAuthority,
+    );
+  }
+
+  static List<VerificationDocumentModel> defaultBusinessDocuments() => [
+    VerificationDocumentModel(
+      id: 'biz-reg-doc-1',
+      title: 'Business Registration Certificate',
+      fileName: 'company_registration_certificate.jpg',
+      type: VerificationDocumentType.image,
+      status: VerificationDocumentStatus.verified,
+      submittedOn: DateTime(2025, 11, 3),
+      issuedIdNumber: '601234567',
+      issuerAuthority: 'Office of the Company Registrar, Nepal',
+    ),
+    VerificationDocumentModel(
+      id: 'biz-pan-doc-2',
+      title: 'PAN / Tax Clearance Certificate',
+      fileName: 'pan_clearance_certificate.pdf',
+      type: VerificationDocumentType.pdf,
+      status: VerificationDocumentStatus.verified,
+      submittedOn: DateTime(2025, 11, 3),
+      issuedIdNumber: 'PAN-601234567',
+      issuerAuthority: 'Inland Revenue Department (IRD), Nepal',
+    ),
+    VerificationDocumentModel(
+      id: 'biz-food-doc-3',
+      title: 'Food Safety & Hygiene License',
+      fileName: 'food_safety_license_2025.jpg',
+      type: VerificationDocumentType.image,
+      status: VerificationDocumentStatus.verified,
+      submittedOn: DateTime(2025, 11, 4),
+      issuedIdNumber: 'DFTQC-88219-NP',
+      issuerAuthority: 'Department of Food Technology and Quality Control',
+    ),
+  ];
+
+  static List<VerificationDocumentModel> defaultNgoDocuments() => [
+    VerificationDocumentModel(
+      id: 'ngo-swc-doc-1',
+      title: 'Social Welfare Council (SWC) Affiliation',
+      fileName: 'swc_affiliation_certificate.jpg',
+      type: VerificationDocumentType.image,
+      status: VerificationDocumentStatus.verified,
+      submittedOn: DateTime(2025, 10, 15),
+      issuedIdNumber: 'SWC-NP-49821',
+      issuerAuthority: 'Social Welfare Council, Nepal',
+    ),
+    VerificationDocumentModel(
+      id: 'ngo-reg-doc-2',
+      title: 'District Administration Registration Letter',
+      fileName: 'district_admin_registration.pdf',
+      type: VerificationDocumentType.pdf,
+      status: VerificationDocumentStatus.verified,
+      submittedOn: DateTime(2025, 10, 15),
+      issuedIdNumber: 'DAO-KTM-2081/142',
+      issuerAuthority: 'District Administration Office, Kathmandu',
+    ),
+    VerificationDocumentModel(
+      id: 'ngo-pan-doc-3',
+      title: 'NGO PAN & Tax Exemption Certificate',
+      fileName: 'ngo_pan_tax_exempt.jpg',
+      type: VerificationDocumentType.image,
+      status: VerificationDocumentStatus.verified,
+      submittedOn: DateTime(2025, 10, 16),
+      issuedIdNumber: 'PAN-601298451',
+      issuerAuthority: 'Inland Revenue Department (IRD), Nepal',
+    ),
+  ];
 }

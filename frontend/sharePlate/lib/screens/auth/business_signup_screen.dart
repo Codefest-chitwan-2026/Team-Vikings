@@ -1,10 +1,12 @@
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:provider/provider.dart';
 
 import '../../core/constants/app_colors.dart';
 import '../../models/business_registration_model.dart';
 import '../../models/picked_location.dart';
+import '../../providers/auth_provider.dart';
 import '../../widgets/business_signup/business_document_section.dart';
 import '../../widgets/business_signup/business_location_picker_tile.dart';
 import '../../widgets/business_signup/business_verification_notice.dart';
@@ -32,7 +34,18 @@ class _BusinessSignUpScreenState extends State<BusinessSignUpScreen> {
   final _registrationNumberController = TextEditingController();
 
   PickedLocation? _selectedLocation;
-  bool _isLoading = false;
+  String? _documentDisplayName;
+
+  String? _businessNameError;
+  String? _contactNameError;
+  String? _phoneError;
+  String? _emailError;
+  String? _passwordError;
+  String? _addressError;
+  String? _panError;
+  String? _locationError;
+  String? _documentError;
+  String? _generalError;
 
   @override
   void dispose() {
@@ -62,6 +75,7 @@ class _BusinessSignUpScreenState extends State<BusinessSignUpScreen> {
 
     setState(() {
       _selectedLocation = result;
+      _locationError = null;
       _businessModel
         ..latitude = result.latitude
         ..longitude = result.longitude;
@@ -71,30 +85,67 @@ class _BusinessSignUpScreenState extends State<BusinessSignUpScreen> {
 
   Future<void> _submitForReview() async {
     FocusScope.of(context).unfocus();
-    if (!_formKey.currentState!.validate()) return;
+    setState(() {
+      _businessNameError = null;
+      _contactNameError = null;
+      _phoneError = null;
+      _emailError = null;
+      _passwordError = null;
+      _addressError = null;
+      _panError = null;
+      _locationError = null;
+      _documentError = null;
+      _generalError = null;
+    });
+
+    final isValid = _formKey.currentState!.validate();
+    bool hasMissingCustom = false;
 
     if (_selectedLocation == null) {
-      _showMessage('Please pin your business location on the map.');
-      return;
+      setState(() => _locationError = 'Please pin your business location on the map.');
+      hasMissingCustom = true;
     }
     if (_businessModel.verificationDocumentPath == null) {
-      _showMessage('Please add a verification document for your business.');
-      return;
+      setState(() => _documentError = 'Please add a verification document for your business.');
+      hasMissingCustom = true;
     }
 
-    setState(() => _isLoading = true);
+    if (!isValid || hasMissingCustom) return;
+
     _saveFormData();
 
-    // Replace this with the business registration API call when available.
-    await Future<void>.delayed(const Duration(seconds: 2));
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+
+    final success = await authProvider.registerBusiness(
+      model: _businessModel,
+    );
+
     if (!mounted) return;
 
-    setState(() => _isLoading = false);
-    _showMessage('Business registration submitted for review.');
-    Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute(builder: (_) => const DonorHomeScreen()),
-      (route) => false,
-    );
+    if (success) {
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (_) => const DonorHomeScreen()),
+        (route) => false,
+      );
+    } else {
+      final error = authProvider.errorMessage ?? 'Registration failed. Please check your details.';
+      setState(() {
+        final errLower = error.toLowerCase();
+        if (errLower.contains('phone')) {
+          _phoneError = error;
+        } else if (errLower.contains('email')) {
+          _emailError = error;
+        } else if (errLower.contains('password')) {
+          _passwordError = error;
+        } else if (errLower.contains('pan') || errLower.contains('registration')) {
+          _panError = error;
+        } else if (errLower.contains('name')) {
+          _businessNameError = error;
+        } else {
+          _generalError = error;
+        }
+      });
+    }
   }
 
   void _saveFormData() {
@@ -114,19 +165,19 @@ class _BusinessSignUpScreenState extends State<BusinessSignUpScreen> {
       allowedExtensions: const ['pdf', 'jpg', 'jpeg', 'png'],
     );
 
-    if (!mounted || result == null) return;
+    if (!mounted || result == null || result.files.isEmpty) return;
 
-    final fileName = result.files.single.name;
-    if (fileName.isEmpty) {
-      _showMessage('The selected file does not have a valid name.');
+    final file = result.files.single;
+    if (file.name.isEmpty) {
+      setState(() => _documentError = 'The selected file does not have a valid name.');
       return;
     }
 
-    setState(() => _businessModel.verificationDocumentPath = fileName);
-  }
-
-  void _showMessage(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    setState(() {
+      _businessModel.verificationDocumentPath = file.path;
+      _documentDisplayName = file.name;
+      _documentError = null;
+    });
   }
 
   String? _required(String? value, String label) {
@@ -154,6 +205,8 @@ class _BusinessSignUpScreenState extends State<BusinessSignUpScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final authProvider = context.watch<AuthProvider>();
+
     return Scaffold(
       backgroundColor: AppColors.white,
       appBar: AppBar(
@@ -196,12 +249,54 @@ class _BusinessSignUpScreenState extends State<BusinessSignUpScreen> {
                 'We review this information before you can post surplus food.',
                 style: TextStyle(color: AppColors.textSecondary, height: 1.4),
               ),
+              if (_generalError != null) ...[
+                const SizedBox(height: 16),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: AppColors.error.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: AppColors.error.withValues(alpha: 0.3)),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.error_outline, color: AppColors.error, size: 20),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          _generalError!,
+                          style: const TextStyle(
+                            color: AppColors.error,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
               const SizedBox(height: 24),
               CustomTextField(
                 label: 'Business name',
                 hintText: 'Himalayan Bites Cafe',
                 controller: _businessNameController,
+                errorText: _businessNameError,
+                onChanged: (_) {
+                  if (_businessNameError != null) setState(() => _businessNameError = null);
+                },
                 validator: (value) => _required(value, 'business name'),
+              ),
+              const SizedBox(height: 16),
+              CustomTextField(
+                label: 'Contact person name',
+                hintText: 'Full name',
+                controller: _contactNameController,
+                errorText: _contactNameError,
+                onChanged: (_) {
+                  if (_contactNameError != null) setState(() => _contactNameError = null);
+                },
+                validator: (value) => _required(value, 'contact person name'),
               ),
               const SizedBox(height: 16),
               CustomTextField(
@@ -209,6 +304,10 @@ class _BusinessSignUpScreenState extends State<BusinessSignUpScreen> {
                 hintText: '98XXXXXXXX',
                 controller: _phoneController,
                 keyboardType: TextInputType.phone,
+                errorText: _phoneError,
+                onChanged: (_) {
+                  if (_phoneError != null) setState(() => _phoneError = null);
+                },
                 validator: _validatePhone,
               ),
               const SizedBox(height: 16),
@@ -217,6 +316,10 @@ class _BusinessSignUpScreenState extends State<BusinessSignUpScreen> {
                 hintText: 'contact@business.com',
                 controller: _emailController,
                 keyboardType: TextInputType.emailAddress,
+                errorText: _emailError,
+                onChanged: (_) {
+                  if (_emailError != null) setState(() => _emailError = null);
+                },
                 validator: _validateEmail,
               ),
               const SizedBox(height: 16),
@@ -225,6 +328,10 @@ class _BusinessSignUpScreenState extends State<BusinessSignUpScreen> {
                 hintText: 'At least 8 characters',
                 controller: _passwordController,
                 isPassword: true,
+                errorText: _passwordError,
+                onChanged: (_) {
+                  if (_passwordError != null) setState(() => _passwordError = null);
+                },
                 validator: _validatePassword,
               ),
               const SizedBox(height: 16),
@@ -232,32 +339,82 @@ class _BusinessSignUpScreenState extends State<BusinessSignUpScreen> {
                 label: 'Business address',
                 hintText: 'Street, ward number, district',
                 controller: _addressController,
+                errorText: _addressError,
+                onChanged: (_) {
+                  if (_addressError != null) setState(() => _addressError = null);
+                },
                 validator: (value) => _required(value, 'business address'),
               ),
               const SizedBox(height: 12),
-              BusinessLocationPickerTile(
-                location: _selectedLocation,
-                onTap: _openMapPicker,
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(12),
+                      border: _locationError != null ? Border.all(color: AppColors.error, width: 1.5) : null,
+                    ),
+                    child: BusinessLocationPickerTile(
+                      location: _selectedLocation,
+                      onTap: _openMapPicker,
+                    ),
+                  ),
+                  if (_locationError != null) ...[
+                    const SizedBox(height: 6),
+                    Padding(
+                      padding: const EdgeInsets.only(left: 4),
+                      child: Text(
+                        _locationError!,
+                        style: const TextStyle(color: AppColors.error, fontSize: 12, fontWeight: FontWeight.w500),
+                      ),
+                    ),
+                  ],
+                ],
               ),
               const SizedBox(height: 20),
               CustomTextField(
                 label: 'Business registration / PAN number',
                 hintText: 'e.g. 601234567',
                 controller: _registrationNumberController,
+                errorText: _panError,
+                onChanged: (_) {
+                  if (_panError != null) setState(() => _panError = null);
+                },
                 validator: (value) =>
                     _required(value, 'business registration or PAN number'),
               ),
               const SizedBox(height: 24),
-              BusinessDocumentSection(
-                verificationDocumentPath: _businessModel.verificationDocumentPath,
-                onVerificationDocumentTap: _pickVerificationDocument,
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(12),
+                      border: _documentError != null ? Border.all(color: AppColors.error, width: 1.5) : null,
+                    ),
+                    child: BusinessDocumentSection(
+                      verificationDocumentPath: _documentDisplayName ?? _businessModel.verificationDocumentPath,
+                      onVerificationDocumentTap: _pickVerificationDocument,
+                    ),
+                  ),
+                  if (_documentError != null) ...[
+                    const SizedBox(height: 6),
+                    Padding(
+                      padding: const EdgeInsets.only(left: 4),
+                      child: Text(
+                        _documentError!,
+                        style: const TextStyle(color: AppColors.error, fontSize: 12, fontWeight: FontWeight.w500),
+                      ),
+                    ),
+                  ],
+                ],
               ),
               const SizedBox(height: 4),
               const BusinessVerificationNotice(),
               const SizedBox(height: 28),
               PrimaryButton(
                 text: 'Submit for review',
-                isLoading: _isLoading,
+                isLoading: authProvider.isLoading,
                 onPressed: _submitForReview,
               ),
             ],

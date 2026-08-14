@@ -8,6 +8,12 @@ class CustomTextField extends StatefulWidget {
   final bool isPassword;
   final TextInputType keyboardType;
   final String? Function(String?)? validator;
+  final String? errorText;
+  final AutovalidateMode? autovalidateMode;
+  final ValueChanged<String>? onChanged;
+  final int maxLines;
+  final Widget? prefixIcon;
+  final Widget? suffixIcon;
 
   const CustomTextField({
     super.key,
@@ -17,6 +23,12 @@ class CustomTextField extends StatefulWidget {
     this.isPassword = false,
     this.keyboardType = TextInputType.text,
     this.validator,
+    this.errorText,
+    this.autovalidateMode,
+    this.onChanged,
+    this.maxLines = 1,
+    this.prefixIcon,
+    this.suffixIcon,
   });
 
   @override
@@ -28,6 +40,8 @@ class _CustomTextFieldState extends State<CustomTextField> {
 
   @override
   Widget build(BuildContext context) {
+    final hasCustomError = widget.errorText != null && widget.errorText!.isNotEmpty;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -45,6 +59,9 @@ class _CustomTextFieldState extends State<CustomTextField> {
           obscureText: widget.isPassword ? _obscureText : false,
           keyboardType: widget.keyboardType,
           validator: widget.validator,
+          autovalidateMode: widget.autovalidateMode ?? AutovalidateMode.onUserInteraction,
+          onChanged: widget.onChanged,
+          maxLines: widget.isPassword ? 1 : widget.maxLines,
           style: const TextStyle(fontSize: 14, color: AppColors.textPrimary),
           decoration: InputDecoration(
             hintText: widget.hintText,
@@ -52,42 +69,57 @@ class _CustomTextFieldState extends State<CustomTextField> {
               fontSize: 13,
               color: AppColors.textSecondary.withValues(alpha: 0.5),
             ),
+            errorText: hasCustomError ? widget.errorText : null,
+            errorMaxLines: 2,
+            errorStyle: const TextStyle(
+              fontSize: 12,
+              color: AppColors.error,
+              fontWeight: FontWeight.w500,
+            ),
             contentPadding: const EdgeInsets.symmetric(
               horizontal: 16,
               vertical: 14,
             ),
+            prefixIcon: widget.prefixIcon,
             enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(10),
-              borderSide: const BorderSide(color: AppColors.border),
+              borderSide: BorderSide(
+                color: hasCustomError ? AppColors.error : AppColors.border,
+                width: hasCustomError ? 1.5 : 1.0,
+              ),
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(10),
-              borderSide: const BorderSide(color: AppColors.primary, width: 1.8),
+              borderSide: BorderSide(
+                color: hasCustomError ? AppColors.error : AppColors.primary,
+                width: 1.8,
+              ),
             ),
             errorBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(10),
-              borderSide: const BorderSide(color: AppColors.error),
+              borderSide: const BorderSide(color: AppColors.error, width: 1.5),
             ),
             focusedErrorBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(10),
-              borderSide: const BorderSide(color: AppColors.error, width: 1.8),
+              borderSide: const BorderSide(color: AppColors.error, width: 2.0),
             ),
-            suffixIcon: widget.isPassword
-                ? IconButton(
-              icon: Icon(
-                _obscureText
-                    ? Icons.visibility_outlined
-                    : Icons.visibility_off_outlined,
-                color: AppColors.textSecondary,
-                size: 20,
-              ),
-              onPressed: () {
-                setState(() {
-                  _obscureText = !_obscureText;
-                });
-              },
-            )
-                : null,
+            suffixIcon: widget.suffixIcon ??
+                (widget.isPassword
+                    ? IconButton(
+                        icon: Icon(
+                          _obscureText
+                              ? Icons.visibility_outlined
+                              : Icons.visibility_off_outlined,
+                          color: hasCustomError ? AppColors.error : AppColors.textSecondary,
+                          size: 20,
+                        ),
+                        onPressed: () {
+                          setState(() {
+                            _obscureText = !_obscureText;
+                          });
+                        },
+                      )
+                    : null),
           ),
         ),
       ],

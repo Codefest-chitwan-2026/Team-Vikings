@@ -167,7 +167,7 @@ class _RecipientHomeTabState extends State<_RecipientHomeTab> {
                 : ListView.separated(
                     padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
                     itemCount: listings.length,
-                    separatorBuilder: (_, __) => const SizedBox(height: 12),
+                    separatorBuilder: (_, _) => const SizedBox(height: 12),
                     itemBuilder: (context, index) {
                       final listing = listings[index];
                       return RecipientListingCard(
@@ -236,68 +236,6 @@ class _RecipientHomeHeader extends StatelessWidget {
           ),
         ),
       ],
-    );
-  }
-}
-
-class _RecipientPlaceholderTab extends StatelessWidget {
-  const _RecipientPlaceholderTab({
-    required this.icon,
-    required this.title,
-    required this.subtitle,
-  });
-
-  final IconData icon;
-  final String title;
-  final String subtitle;
-
-  @override
-  Widget build(BuildContext context) {
-    return SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(20, 24, 20, 0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              title,
-              style: const TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
-                color: AppColors.textPrimary,
-              ),
-            ),
-            const Spacer(),
-            Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(icon, size: 48, color: AppColors.textSecondary),
-                  const SizedBox(height: 16),
-                  Text(
-                    subtitle,
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(
-                      fontSize: 14,
-                      color: AppColors.textSecondary,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  const Text(
-                    'Coming soon',
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.primaryEmerald,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const Spacer(flex: 2),
-          ],
-        ),
-      ),
     );
   }
 }

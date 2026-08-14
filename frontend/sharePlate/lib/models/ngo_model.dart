@@ -7,6 +7,19 @@ enum NgoOrganizationType {
 
   final String label;
   const NgoOrganizationType(this.label);
+
+  String get backendValue {
+    switch (this) {
+      case NgoOrganizationType.elderlyHome:
+        return 'Elderly Home';
+      case NgoOrganizationType.orphanage:
+        return 'Orphange'; // Matches Django model choice definition
+      case NgoOrganizationType.ngo:
+      case NgoOrganizationType.communityKitchen:
+      case NgoOrganizationType.others:
+        return 'NGO';
+    }
+  }
 }
 
 class NgoRegistrationModel {
@@ -37,6 +50,18 @@ class NgoRegistrationModel {
     this.documentPath,
     this.documentName,
   });
+
+  Map<String, String> toFormFields() => {
+        'phone_num': phoneNumber.trim(),
+        'email': email.trim(),
+        'password': password,
+        'organization_name': organizationName.trim(),
+        'organization_type': organizationType.backendValue,
+        'registration_number': panNumber.trim(),
+        'address': addressText.trim(),
+        if (latitude != null) 'latitude': latitude.toString(),
+        if (longitude != null) 'longitude': longitude.toString(),
+      };
 
   Map<String, dynamic> toJson() {
     return {

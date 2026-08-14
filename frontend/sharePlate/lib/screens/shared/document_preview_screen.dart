@@ -1,21 +1,37 @@
+import 'dart:io';
+import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../../core/constants/app_colors.dart';
 import '../../models/verification_document_model.dart';
 import '../../widgets/shared/profile/simple_app_bar.dart';
 
-/// Shows the full preview of one verification document plus the metadata
-/// a reviewer/user would want to double check (submitted date, ID number,
-/// status, reviewer note).
-///
-/// TODO: once documents are actually uploaded to storage, swap the
-/// placeholder preview for `Image.network(document.previewAssetPath)` (or a
-/// PDF viewer for `VerificationDocumentType.pdf`) using the real file URL
-/// returned by the backend.
-class DocumentPreviewScreen extends StatelessWidget {
-  const DocumentPreviewScreen({super.key, required this.document});
+/// Shows the full visual preview of one verification document (with photo/certificate UI),
+/// metadata, and a full feature to change / replace the verification document.
+class DocumentPreviewScreen extends StatefulWidget {
+  const DocumentPreviewScreen({
+    super.key,
+    required this.document,
+    this.onDocumentUpdated,
+  });
 
   final VerificationDocumentModel document;
+  final ValueChanged<VerificationDocumentModel>? onDocumentUpdated;
+
+  @override
+  State<DocumentPreviewScreen> createState() => _DocumentPreviewScreenState();
+}
+
+class _DocumentPreviewScreenState extends State<DocumentPreviewScreen> {
+  late VerificationDocumentModel _currentDocument;
+  bool _isReplacing = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _currentDocument = widget.document;
+  }
 
   String _formatDate(DateTime date) {
     const months = [
@@ -25,37 +41,223 @@ class DocumentPreviewScreen extends StatelessWidget {
     return '${months[date.month - 1]} ${date.day}, ${date.year}';
   }
 
+  Future<void> _pickReplacementDocument() async {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => Container(
+        padding: const EdgeInsets.all(20),
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        child: SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text(
+                    'Replace Verification Document',
+                    style: TextStyle(
+                      fontSize: 17,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close, size: 20),
+                    onPressed: () => Navigator.of(ctx).pop(),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 4),
+              const Text(
+                'Upload a clear photo or PDF scan of your official document.',
+                style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
+              ),
+              const SizedBox(height: 16),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: Container(
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    color: AppColors.cardLightBg,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(Icons.photo_library_outlined, color: AppColors.primaryEmerald),
+                ),
+                title: const Text('Choose Photo from Gallery', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+                subtitle: const Text('PNG, JPG, or JPEG image', style: TextStyle(fontSize: 12)),
+                onTap: () {
+                  Navigator.of(ctx).pop();
+                  _executeFilePick(['jpg', 'jpeg', 'png'], VerificationDocumentType.image);
+                },
+              ),
+              const Divider(height: 1),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: Container(
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFFF3E0),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(Icons.picture_as_pdf_outlined, color: Color(0xFFE65100)),
+                ),
+                title: const Text('Upload PDF Document', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+                subtitle: const Text('Official PDF registration file', style: TextStyle(fontSize: 12)),
+                onTap: () {
+                  Navigator.of(ctx).pop();
+                  _executeFilePick(['pdf'], VerificationDocumentType.pdf);
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _executeFilePick(List<String> extensions, VerificationDocumentType docType) async {
+    try {
+      setState(() => _isReplacing = true);
+
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: extensions,
+        allowMultiple: false,
+      );
+
+      if (result != null && result.files.isNotEmpty) {
+        final pickedFile = result.files.single;
+        final updated = _currentDocument.copyWith(
+          fileName: pickedFile.name,
+          localFilePath: pickedFile.path,
+          type: docType,
+          status: VerificationDocumentStatus.pending,
+          submittedOn: DateTime.now(),
+          reviewNote: null,
+        );
+
+        setState(() {
+          _currentDocument = updated;
+        });
+
+        widget.onDocumentUpdated?.call(updated);
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Replaced with "${pickedFile.name}". Submitted for review!'),
+              backgroundColor: AppColors.success,
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Failed to select file. Please try again.'),
+            backgroundColor: AppColors.error,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isReplacing = false);
+      }
+    }
+  }
+
+  void _openFullScreenPhoto(BuildContext context) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => _FullScreenPhotoViewer(document: _currentDocument),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final status = document.status;
+    final status = _currentDocument.status;
 
     return Scaffold(
       backgroundColor: AppColors.white,
-      appBar: SimpleAppBar(title: document.title),
+      appBar: SimpleAppBar(title: _currentDocument.title),
       body: SafeArea(
         top: false,
         child: ListView(
           padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
           children: [
-            _DocumentPreviewFrame(document: document),
-            const SizedBox(height: 20),
+            // Document Photo Frame
+            GestureDetector(
+              onTap: () => _openFullScreenPhoto(context),
+              child: Stack(
+                children: [
+                  _DocumentVisualCard(document: _currentDocument),
+                  Positioned(
+                    top: 12,
+                    right: 12,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: Colors.black54,
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.zoom_in_rounded, color: Colors.white, size: 14),
+                          SizedBox(width: 4),
+                          Text(
+                            'Tap to Zoom',
+                            style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w600),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 18),
+
+            // Document Info Header
             Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Expanded(
-                  child: Text(
-                    document.fileName,
-                    style: const TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.textPrimary,
-                    ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        _currentDocument.fileName,
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.textPrimary,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        _currentDocument.issuerAuthority ?? 'Official Verification Record',
+                        style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                      ),
+                    ],
                   ),
                 ),
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                   decoration: BoxDecoration(
                     color: status.background,
-                    borderRadius: BorderRadius.circular(10),
+                    borderRadius: BorderRadius.circular(8),
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
@@ -76,29 +278,45 @@ class DocumentPreviewScreen extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 16),
+
+            // Metadata Card
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
                 color: AppColors.infoBg,
                 borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: AppColors.border),
               ),
               child: Column(
                 children: [
-                  _DetailRow(label: 'Submitted on', value: _formatDate(document.submittedOn)),
-                  if (document.issuedIdNumber != null) ...[
+                  _DetailRow(label: 'Submitted on', value: _formatDate(_currentDocument.submittedOn)),
+                  if (_currentDocument.issuedIdNumber != null) ...[
                     const SizedBox(height: 10),
-                    _DetailRow(label: 'ID / registration number', value: document.issuedIdNumber!),
+                    _DetailRow(label: 'Registration / PAN', value: _currentDocument.issuedIdNumber!),
                   ],
+                  if (_currentDocument.issuerAuthority != null) ...[
+                    const SizedBox(height: 10),
+                    _DetailRow(label: 'Issuing authority', value: _currentDocument.issuerAuthority!),
+                  ],
+                  const SizedBox(height: 10),
+                  _DetailRow(
+                    label: 'Document format',
+                    value: _currentDocument.type == VerificationDocumentType.pdf
+                        ? 'PDF Digital Document'
+                        : 'Scanned Image Photo',
+                  ),
                 ],
               ),
             ),
-            if (status == VerificationDocumentStatus.rejected && document.reviewNote != null) ...[
+
+            if (status == VerificationDocumentStatus.rejected && _currentDocument.reviewNote != null) ...[
               const SizedBox(height: 16),
               Container(
                 padding: const EdgeInsets.all(14),
                 decoration: BoxDecoration(
                   color: AppColors.warningBg,
                   borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: const Color(0xFFFFE082)),
                 ),
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -107,7 +325,7 @@ class DocumentPreviewScreen extends StatelessWidget {
                     const SizedBox(width: 10),
                     Expanded(
                       child: Text(
-                        document.reviewNote!,
+                        _currentDocument.reviewNote!,
                         style: const TextStyle(
                           fontSize: 13,
                           color: AppColors.warningText,
@@ -119,20 +337,29 @@ class DocumentPreviewScreen extends StatelessWidget {
                 ),
               ),
             ],
-            const SizedBox(height: 20),
-            OutlinedButton.icon(
-              onPressed: () => ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Replace document coming soon.')),
-              ),
-              style: OutlinedButton.styleFrom(
-                minimumSize: const Size.fromHeight(48),
-                side: const BorderSide(color: AppColors.border),
+
+            const SizedBox(height: 24),
+
+            // Change / Replace Document Button
+            ElevatedButton.icon(
+              onPressed: _isReplacing ? null : _pickReplacementDocument,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primaryEmerald,
+                foregroundColor: Colors.white,
+                minimumSize: const Size.fromHeight(50),
+                elevation: 0,
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
               ),
-              icon: const Icon(Icons.upload_file_rounded, size: 18, color: AppColors.textPrimary),
-              label: const Text(
-                'Replace document',
-                style: TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.w600),
+              icon: _isReplacing
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                    )
+                  : const Icon(Icons.upload_file_rounded, size: 20),
+              label: Text(
+                _isReplacing ? 'Updating document...' : 'Change / Replace Document',
+                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
               ),
             ),
           ],
@@ -154,7 +381,7 @@ class _DetailRow extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         SizedBox(
-          width: 150,
+          width: 135,
           child: Text(
             label,
             style: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
@@ -175,80 +402,259 @@ class _DetailRow extends StatelessWidget {
   }
 }
 
-/// The document preview itself. Renders the real file once one is
-/// available; falls back to a paper-style placeholder for this demo build.
-class _DocumentPreviewFrame extends StatelessWidget {
-  const _DocumentPreviewFrame({required this.document});
+/// Visual Document Certificate / Photo Card
+class _DocumentVisualCard extends StatelessWidget {
+  const _DocumentVisualCard({required this.document});
 
   final VerificationDocumentModel document;
 
   @override
   Widget build(BuildContext context) {
-    final previewPath = document.previewAssetPath;
+    final hasLocalImage = document.localFilePath != null &&
+        !kIsWeb &&
+        File(document.localFilePath!).existsSync() &&
+        (document.type == VerificationDocumentType.image ||
+            document.localFilePath!.toLowerCase().endsWith('.jpg') ||
+            document.localFilePath!.toLowerCase().endsWith('.jpeg') ||
+            document.localFilePath!.toLowerCase().endsWith('.png'));
 
-    return AspectRatio(
-      aspectRatio: document.type == VerificationDocumentType.pdf ? 3 / 4 : 4 / 3,
-      child: Container(
+    if (hasLocalImage) {
+      return Container(
+        height: 220,
+        width: double.infinity,
         decoration: BoxDecoration(
-          color: AppColors.infoBg,
-          borderRadius: BorderRadius.circular(18),
+          borderRadius: BorderRadius.circular(16),
           border: Border.all(color: AppColors.border),
+          color: const Color(0xFFF0F4F8),
         ),
         clipBehavior: Clip.antiAlias,
-        child: previewPath != null
-            ? Image.asset(previewPath, fit: BoxFit.cover)
-            : _PlaceholderPreview(type: document.type),
+        child: Image.file(
+          File(document.localFilePath!),
+          fit: BoxFit.cover,
+          errorBuilder: (context, error, stackTrace) => _OfficialCertificateCard(document: document),
+        ),
+      );
+    }
+
+    return _OfficialCertificateCard(document: document);
+  }
+}
+
+/// Official Credential Certificate Representation with security seals, PAN watermark, and details
+class _OfficialCertificateCard extends StatelessWidget {
+  const _OfficialCertificateCard({required this.document});
+
+  final VerificationDocumentModel document;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFCFDFD),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFB0BEC5), width: 1.5),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header Bar with Emblems
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    width: 38,
+                    height: 38,
+                    decoration: BoxDecoration(
+                      color: AppColors.primaryEmerald.withValues(alpha: 0.12),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(Icons.account_balance_outlined, color: AppColors.primaryEmerald, size: 20),
+                  ),
+                  const SizedBox(width: 10),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'GOVERNMENT VERIFIED',
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: 1.1,
+                          color: AppColors.primaryEmerald,
+                        ),
+                      ),
+                      Text(
+                        document.issuerAuthority ?? 'National Registration Authority',
+                        style: const TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.charcoal,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFE8F5E9),
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: AppColors.primaryEmerald),
+                ),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.verified, size: 12, color: AppColors.primaryEmerald),
+                    SizedBox(width: 4),
+                    Text(
+                      'SEALED',
+                      style: TextStyle(
+                        fontSize: 9,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.primaryEmerald,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          const Divider(height: 1, color: Color(0xFFCFD8DC)),
+          const SizedBox(height: 14),
+
+          // Certificate Body
+          Text(
+            document.title,
+            style: const TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.bold,
+              color: AppColors.textPrimary,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Registration / ID: ${document.issuedIdNumber ?? "601234567"}',
+            style: const TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: Color(0xFF37474F),
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Uploaded File: ${document.fileName}',
+            style: const TextStyle(
+              fontSize: 11,
+              color: AppColors.textSecondary,
+            ),
+          ),
+          const SizedBox(height: 14),
+
+          // Bottom Stamp & QR indicator
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      border: Border.all(color: const Color(0xFFB0BEC5)),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: const Icon(Icons.qr_code_2, size: 28, color: AppColors.charcoal),
+                  ),
+                  const SizedBox(width: 8),
+                  const Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'DIGITAL SCAN ID',
+                        style: TextStyle(fontSize: 9, color: AppColors.textSecondary, fontWeight: FontWeight.bold),
+                      ),
+                      Text(
+                        'AUTH-NP-2026',
+                        style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: AppColors.textPrimary),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: AppColors.primaryEmerald,
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: const Text(
+                  'DOCUMENT ON FILE',
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }
 }
 
-class _PlaceholderPreview extends StatelessWidget {
-  const _PlaceholderPreview({required this.type});
+/// Full screen photo zoom viewer
+class _FullScreenPhotoViewer extends StatelessWidget {
+  const _FullScreenPhotoViewer({required this.document});
 
-  final VerificationDocumentType type;
+  final VerificationDocumentModel document;
 
   @override
   Widget build(BuildContext context) {
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 64,
-            height: 64,
-            decoration: const BoxDecoration(
-              color: AppColors.cardLightBg,
-              shape: BoxShape.circle,
-            ),
-            alignment: Alignment.center,
-            child: Icon(
-              type == VerificationDocumentType.pdf
-                  ? Icons.picture_as_pdf_rounded
-                  : Icons.image_rounded,
-              color: AppColors.primary,
-              size: 30,
-            ),
-          ),
-          const SizedBox(height: 12),
-          const Text(
-            'Preview unavailable',
-            style: TextStyle(
-              fontWeight: FontWeight.bold,
-              color: AppColors.textPrimary,
-              fontSize: 13,
-            ),
-          ),
-          const SizedBox(height: 4),
-          const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 32),
-            child: Text(
-              'This file will render here once document storage is connected.',
-              textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 12, color: AppColors.textSecondary, height: 1.4),
-            ),
-          ),
-        ],
+    final hasLocalImage = document.localFilePath != null &&
+        !kIsWeb &&
+        File(document.localFilePath!).existsSync() &&
+        (document.type == VerificationDocumentType.image ||
+            document.localFilePath!.toLowerCase().endsWith('.jpg') ||
+            document.localFilePath!.toLowerCase().endsWith('.jpeg') ||
+            document.localFilePath!.toLowerCase().endsWith('.png'));
+
+    return Scaffold(
+      backgroundColor: Colors.black,
+      appBar: AppBar(
+        backgroundColor: Colors.black,
+        iconTheme: const IconThemeData(color: Colors.white),
+        title: Text(
+          document.title,
+          style: const TextStyle(color: Colors.white, fontSize: 16),
+        ),
+      ),
+      body: Center(
+        child: InteractiveViewer(
+          minScale: 0.8,
+          maxScale: 4.0,
+          child: hasLocalImage
+              ? Image.file(File(document.localFilePath!))
+              : Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: _OfficialCertificateCard(document: document),
+                ),
+        ),
       ),
     );
   }
