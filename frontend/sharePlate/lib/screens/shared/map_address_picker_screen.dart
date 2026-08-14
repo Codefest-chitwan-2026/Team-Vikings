@@ -11,9 +11,12 @@ class MapAddressPickerScreen extends StatefulWidget {
   const MapAddressPickerScreen({
     super.key,
     this.initialLocation,
+    this.selectionHint =
+        'Tap anywhere on the map to select your organization\'s location.',
   });
 
   final LatLng? initialLocation;
+  final String selectionHint;
 
   @override
   State<MapAddressPickerScreen> createState() =>
@@ -504,6 +507,7 @@ class _MapAddressPickerScreenState
               isLocating: _isLocating,
               isGettingAddress:
               _isGettingAddress,
+              selectionHint: widget.selectionHint,
               onConfirm:
               hasSelection &&
                   !_isLocating &&
@@ -564,12 +568,14 @@ class _LocationConfirmationSheet
     required this.hasSelection,
     required this.isLocating,
     required this.isGettingAddress,
+    required this.selectionHint,
     required this.onConfirm,
   });
 
   final bool hasSelection;
   final bool isLocating;
   final bool isGettingAddress;
+  final String selectionHint;
   final VoidCallback? onConfirm;
 
   @override
@@ -617,10 +623,9 @@ class _LocationConfirmationSheet
 
             const SizedBox(height: 6),
 
-            const Text(
-              'Tap anywhere on the map to '
-                  'select your organization\'s location.',
-              style: TextStyle(
+            Text(
+              selectionHint,
+              style: const TextStyle(
                 fontSize: 13,
                 color: Colors.black87,
               ),

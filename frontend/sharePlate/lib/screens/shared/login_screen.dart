@@ -4,6 +4,7 @@ import '../../core/constants/app_colors.dart';
 import '../../models/user_model.dart';
 import '../../widgets/shared/custom_text_field.dart';
 import '../../widgets/login_screen/primary_button.dart';
+import '../donor/donor_home_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   final UserRole role;
@@ -39,7 +40,11 @@ class _LoginScreenState extends State<LoginScreen> {
       Future.delayed(const Duration(seconds: 1), () {
         if (mounted) {
           setState(() => _isLoading = false);
-          // Navigate to Home Dashboard after login
+          if (widget.role == UserRole.donor) {
+            Navigator.of(context).pushReplacement(
+              MaterialPageRoute(builder: (_) => const DonorHomeScreen()),
+            );
+          }
         }
       });
     }

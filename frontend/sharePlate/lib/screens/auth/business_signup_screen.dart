@@ -10,6 +10,7 @@ import '../../widgets/business_signup/business_location_picker_tile.dart';
 import '../../widgets/business_signup/business_verification_notice.dart';
 import '../../widgets/login_screen/primary_button.dart';
 import '../../widgets/shared/custom_text_field.dart';
+import '../donor/donor_home_screen.dart';
 import '../shared/map_address_picker_screen.dart';
 
 class BusinessSignUpScreen extends StatefulWidget {
@@ -90,6 +91,10 @@ class _BusinessSignUpScreenState extends State<BusinessSignUpScreen> {
 
     setState(() => _isLoading = false);
     _showMessage('Business registration submitted for review.');
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(builder: (_) => const DonorHomeScreen()),
+      (route) => false,
+    );
   }
 
   void _saveFormData() {

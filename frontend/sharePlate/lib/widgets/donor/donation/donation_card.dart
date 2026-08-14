@@ -1,0 +1,128 @@
+import 'package:flutter/material.dart';
+
+import '../../../core/constants/app_colors.dart';
+import '../../../models/donation_model.dart';
+import 'donation_status_chip.dart';
+
+class DonationCard extends StatelessWidget {
+  const DonationCard({
+    super.key,
+    required this.donation,
+    required this.onActionTap,
+  });
+
+  final DonationItem donation;
+  final ValueChanged<DonationCardAction> onActionTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Posted ${donation.postedAgo}',
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: AppColors.textSecondary,
+                ),
+              ),
+              DonationStatusChip(status: donation.status),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Text(
+            donation.title,
+            style: const TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.bold,
+              color: AppColors.textPrimary,
+            ),
+          ),
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              for (var i = 0; i < donation.actions.length; i++) ...[
+                if (i > 0) const SizedBox(width: 10),
+                Expanded(
+                  child: _ActionButton(
+                    action: donation.actions[i],
+                    onTap: () => onActionTap(donation.actions[i].action),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ActionButton extends StatelessWidget {
+  const _ActionButton({required this.action, required this.onTap});
+
+  final DonationAction action;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    if (action.isPrimary) {
+      return SizedBox(
+        height: 38,
+        child: ElevatedButton(
+          onPressed: onTap,
+          style: ElevatedButton.styleFrom(
+            backgroundColor: AppColors.primaryEmerald,
+            foregroundColor: Colors.white,
+            elevation: 0,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+            ),
+          ),
+          child: Text(
+            action.label,
+            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+          ),
+        ),
+      );
+    }
+
+    return SizedBox(
+      height: 38,
+      child: OutlinedButton(
+        onPressed: onTap,
+        style: OutlinedButton.styleFrom(
+          foregroundColor: action.isDestructive
+              ? AppColors.error
+              : AppColors.textPrimary,
+          side: BorderSide(
+            color: action.isDestructive ? AppColors.error : AppColors.border,
+          ),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(8),
+          ),
+        ),
+        child: Text(
+          action.label,
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            color: action.isDestructive
+                ? AppColors.error
+                : AppColors.textPrimary,
+          ),
+        ),
+      ),
+    );
+  }
+}
