@@ -8,6 +8,7 @@ import '../../models/picked_location.dart';
 import '../../widgets/login_screen/primary_button.dart';
 import '../../widgets/shared/custom_text_field.dart';
 import '../../widgets/shared/document_upload_tile.dart';
+import '../recipient/recipient_home_screen.dart';
 import '../shared/map_address_picker_screen.dart';
 
 class NgoSignUpScreen extends StatefulWidget {
@@ -88,7 +89,9 @@ class _NgoSignUpScreenState extends State<NgoSignUpScreen> {
     if (!mounted) return;
 
     setState(() => _isLoading = false);
-    _showMessage('Registration submitted for manual review.');
+    Navigator.of(context).pushReplacement(
+      MaterialPageRoute(builder: (_) => const RecipientHomeScreen()),
+    );
   }
 
   Future<void> _pickDocument() async {

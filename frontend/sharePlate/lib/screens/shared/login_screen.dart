@@ -4,7 +4,9 @@ import '../../core/constants/app_colors.dart';
 import '../../models/user_model.dart';
 import '../../widgets/shared/custom_text_field.dart';
 import '../../widgets/login_screen/primary_button.dart';
+import '../consumer/consumer_home_screen.dart';
 import '../donor/donor_home_screen.dart';
+import '../recipient/recipient_home_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   final UserRole role;
@@ -43,6 +45,14 @@ class _LoginScreenState extends State<LoginScreen> {
           if (widget.role == UserRole.donor) {
             Navigator.of(context).pushReplacement(
               MaterialPageRoute(builder: (_) => const DonorHomeScreen()),
+            );
+          } else if (widget.role == UserRole.ngo) {
+            Navigator.of(context).pushReplacement(
+              MaterialPageRoute(builder: (_) => const RecipientHomeScreen()),
+            );
+          } else if (widget.role == UserRole.consumer) {
+            Navigator.of(context).pushReplacement(
+              MaterialPageRoute(builder: (_) => const ConsumerHomeScreen()),
             );
           }
         }

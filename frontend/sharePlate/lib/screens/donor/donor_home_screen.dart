@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../../core/constants/app_colors.dart';
 import '../../widgets/donor/donor_bottom_navigation.dart';
+import 'donor_notifications_screen.dart';
+import 'donor_profile_screen.dart';
 import 'my_donations_screen.dart';
 
 class DonorHomeScreen extends StatefulWidget {
@@ -35,16 +37,8 @@ class _DonorHomeScreenState extends State<DonorHomeScreen> {
         children: [
           _DonorHomeTab(onNotificationsTap: () => _onTabSelected(2)),
           const MyDonationsScreen(),
-          const _DonorPlaceholderTab(
-            icon: Icons.notifications_none_rounded,
-            title: 'Notifications',
-            subtitle: 'Stay updated on your donations and nearby opportunities.',
-          ),
-          const _DonorPlaceholderTab(
-            icon: Icons.person_outline_rounded,
-            title: 'Profile',
-            subtitle: 'Manage your account and donation preferences.',
-          ),
+          const DonorNotificationsScreen(),
+          const DonorProfileScreen(),
         ],
       ),
       bottomNavigationBar: DonorBottomNavigation(
