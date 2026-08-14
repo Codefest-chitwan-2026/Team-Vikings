@@ -1,3 +1,1 @@
-from django.contrib import admin
-
-# Register your models here.
+# Authentication app has no models — login/logout handled via API views.
