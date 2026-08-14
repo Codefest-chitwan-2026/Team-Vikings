@@ -37,6 +37,9 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+
+    # created apps 
+    'users',
 ]
 
 MIDDLEWARE = [
@@ -125,3 +128,7 @@ MAILERS = {
         'BACKEND': 'django.core.mail.backends.console.EmailBackend',
     },
 }
+
+
+######## Custom User Model 
+AUTH_USER_MODEL = "users.User"
