@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:shareplate/screens/shared/role_selection_screen.dart';
 import '../../core/constants/app_colors.dart';
 import '../../models/user_model.dart';
-import '../../widgets/login_screen/custom_text_field.dart';
+import '../../widgets/shared/custom_text_field.dart';
 import '../../widgets/login_screen/primary_button.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -45,7 +46,9 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   void _navigateToSignUp() {
-    // Navigates to Sign-up Screen
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const RoleSelectionScreen()),
+    );
   }
 
   void _onForgotPassword() {

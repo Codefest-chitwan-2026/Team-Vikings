@@ -34,4 +34,12 @@ class AppColors {
 
   static const Color infoBg = Color(0xFFF2F4F5); // Light grey banner background
 
+  static const Color warningBg = Color(0xFFFFF8E1);     // Light yellow container
+  static const Color warningText = Color(0xFF8D6E63);   // Soft brown text for notes
+
+  static const Color primaryEmerald = Color(0xFF1EAA55); // Emerald Green
+  static const Color charcoal = Color(0xFF212121);
+  static const Color gray = Color(0xFFE0E0E0);
+  static const Color white = Colors.white;
+
 }

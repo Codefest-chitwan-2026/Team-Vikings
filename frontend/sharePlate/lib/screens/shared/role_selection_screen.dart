@@ -3,6 +3,9 @@ import '../../core/constants/app_colors.dart';
 import '../../models/user_model.dart';
 import '../../widgets/role_selection/info_banner.dart';
 import '../../widgets/role_selection/role_card.dart';
+import '../auth/business_signup_screen.dart';
+import '../auth/consumer_signup_screen.dart';
+import '../auth/ngo_signup_screen.dart';
 import 'login_screen.dart';
 
 class RoleSelectionScreen extends StatefulWidget {
@@ -27,11 +30,23 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen> {
   }
 
   void _onContinue() {
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => LoginScreen(role: _selectedRole),
-      ),
-    );
+    switch (_selectedRole) {
+      case UserRole.ngo:
+        Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => const NgoSignUpScreen()),
+        );
+        break;
+      case UserRole.donor:
+        Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => const BusinessSignUpScreen()),
+        );
+        break;
+      case UserRole.consumer:
+        Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => const ConsumerSignUpScreen()),
+        );
+        break;
+    }
   }
 
   @override
