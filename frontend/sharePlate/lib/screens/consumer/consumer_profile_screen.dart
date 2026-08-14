@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import '../../core/constants/app_colors.dart';
 import '../../widgets/shared/profile_widgets.dart';
 import '../shared/login_screen.dart';
+import 'consumer_help_support_screen.dart';
+import 'consumer_notification_settings_screen.dart';
 
 /// Profile tab shown to a consumer (customer).
 /// TODO: replace the hard-coded name/stats with the signed-in UserModel once
@@ -63,14 +65,16 @@ class ConsumerProfileScreen extends StatelessWidget {
           ProfileMenuTile(
             icon: Icons.notifications_none_rounded,
             label: 'Notification settings',
-            onTap: () => _showComingSoon(context, 'Notification settings'),
-          ),
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const ConsumerNotificationSettingsScreen()),
+            ),          ),
           const Divider(height: 1, color: AppColors.border),
           ProfileMenuTile(
             icon: Icons.help_outline_rounded,
             label: 'Help & support',
-            onTap: () => _showComingSoon(context, 'Help & support'),
-          ),
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const ConsumerHelpSupportScreen()),
+            ),          ),
           const Divider(height: 1, color: AppColors.border),
           ProfileMenuTile(
             icon: Icons.logout_rounded,
