@@ -249,4 +249,113 @@ class DonationEndpointTests(TestCase):
         self.assertEqual(verify_response.status_code, status.HTTP_200_OK)
         self.assertEqual(verify_response.data["donation"]["status"], "PICKED_UP")
 
+    def test_post_donation_with_minutes_and_lowercase_choices(self):
+        self._login(self.business_user)
+        response = self.client.post(
+            "/api/donations/",
+            {
+                "title": "Fresh Veggie Curry",
+                "description": "Cooked 1 hour ago",
+                "food_type": "veg",
+                "listing_type": "donation",
+                "quantity": "8.5",
+                "people_served": 15,
+                "ngo_priority_duration_minutes": 45,
+                "best_before_hours": 3.5,
+                "pickup_address": "Kathmandu",
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data["food_type"], "VEG")
+        self.assertEqual(response.data["listing_type"], "DONATION")
+        self.assertIsNotNone(response.data["ngo_priority_expires_at"])
+
+    def test_post_donation_with_listing_details(self):
+        self._login(self.business_user)
+        response = self.client.post(
+            "/api/donations/",
+            {
+                "title": "Surplus Pastries",
+                "description": "Fresh morning pastries",
+                "food_type": "veg",
+                "quantity": "5",
+                "people_served": 10,
+                "pickup_instructions": "Ask for kitchen manager at back door",
+                "contact_name": "Suman",
+                "contact_phone": "9800000001",
+                "pack_size": 2,
+                "auto_discount_percent": "60.00",
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertIn("listing_detail", response.data)
+        if response.data["listing_detail"]:
+            self.assertEqual(
+                response.data["listing_detail"]["pickup_instructions"],
+                "Ask for kitchen manager at back door",
+            )
+            self.assertEqual(
+                response.data["listing_detail"]["contact_name"],
+                "Suman",
+            )
+
+    def test_direct_claims_post_endpoint(self):
+        self._login(self.business_user)
+        donation = self._create_donation()
+
+        self._login(self.ngo_user)
+        response = self.client.post(
+            "/api/claims/",
+            {
+                "donation_id": donation["id"],
+                "pickup_method": "SELF",
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertIn("pickup_ticket", response.data["claim"])
+
+    def test_direct_reservations_post_endpoint(self):
+        self._login(self.business_user)
+        donation = self._create_donation(
+            listing_type="FLASH_SALE",
+            flash_sale_price=Decimal("120.00"),
+        )
+
+        self._login(self.customer_user)
+        response = self.client.post(
+            "/api/reservations/",
+            {
+                "donation_id": donation["id"],
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertIn("pickup_ticket", response.data["reservation"])
+
+    def test_staff_can_create_donation(self):
+        staff_user = User.objects.create_superuser(
+            phone_num="9899999999",
+            email="admin@test.com",
+            password="testpass123",
+            role="BUSINESS",
+        )
+        self._login(staff_user)
+        response = self.client.post(
+            "/api/donations/",
+            {
+                "title": "Staff Posted Donation",
+                "description": "Test donation by staff",
+                "food_type": "MIXED",
+                "quantity": "12.00",
+                "people_served": 24,
+                "pickup_address": "Kathmandu",
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+
+
 

@@ -138,8 +138,9 @@ class Donation(models.Model):
     def save(self, *args, **kwargs):
         if not self.pk and self.listing_type == "DONATION":
             if not self.ngo_priority_expires_at:
+                duration = self.ngo_priority_duration or default_ngo_priority_duration()
                 self.ngo_priority_expires_at = (
-                    timezone.now() + self.ngo_priority_duration
+                    timezone.now() + duration
                 )
         super().save(*args, **kwargs)
 
