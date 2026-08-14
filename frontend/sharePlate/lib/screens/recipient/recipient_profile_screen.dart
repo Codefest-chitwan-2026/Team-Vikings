@@ -1,6 +1,8 @@
 
 
 import 'package:flutter/material.dart';
+import 'package:shareplate/screens/recipient/recipient_help_support_screen.dart';
+import 'package:shareplate/screens/recipient/recipient_notification_settings_screen.dart';
 
 import '../../core/constants/app_colors.dart';
 import '../../models/recipient_listing_model.dart';
@@ -76,14 +78,16 @@ class RecipientProfileScreen extends StatelessWidget {
           ProfileMenuTile(
             icon: Icons.notifications_none_rounded,
             label: 'Notification settings',
-            onTap: () => _showComingSoon(context, 'Notification settings'),
-          ),
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const RecipientNotificationSettingsScreen()),
+            ),          ),
           const Divider(height: 1, color: AppColors.border),
           ProfileMenuTile(
             icon: Icons.help_outline_rounded,
             label: 'Help & support',
-            onTap: () => _showComingSoon(context, 'Help & support'),
-          ),
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const RecipientHelpSupportScreen()),
+            ),          ),
           const Divider(height: 1, color: AppColors.border),
           ProfileMenuTile(
             icon: Icons.logout_rounded,
