@@ -28,4 +28,8 @@ class AppColors {
   static const Color error = Color(0xFFB00020);
   static const Color success = Color(0xFF2E7D32);
   static const Color warning = Color(0xFFED6C02);
+
+  static const Color cardLightBg = Color(0xFFE8F5E9); // Light green background for hero card
+  static const Color chipBg = Color(0xFFE8F5E9);      // Light green tag background
+
 }
