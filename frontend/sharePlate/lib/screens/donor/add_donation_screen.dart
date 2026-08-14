@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:provider/provider.dart';
 
 import '../../core/constants/app_colors.dart';
 import '../../models/donation_model.dart';
 import '../../models/picked_location.dart';
+import '../../providers/donation_provider.dart';
 import '../../widgets/donor/add_donation/food_category_selector.dart';
 import '../../widgets/donor/add_donation/listing_type_toggle.dart';
 import '../../widgets/donor/add_donation/photo_upload_area.dart';
@@ -15,9 +17,23 @@ import '../../widgets/shared/custom_text_field.dart';
 import '../shared/map_address_picker_screen.dart';
 import 'listing_success_screen.dart';
 
-
 class AddDonationScreen extends StatefulWidget {
-  const AddDonationScreen({super.key});
+  final DonationItem? donationToEdit;
+  final String? prefilledTitle;
+  final String? prefilledQuantity;
+  final FoodCategory? prefilledCategory;
+  final String? prefilledServes;
+  final String? prefilledAddress;
+
+  const AddDonationScreen({
+    super.key,
+    this.donationToEdit,
+    this.prefilledTitle,
+    this.prefilledQuantity,
+    this.prefilledCategory,
+    this.prefilledServes,
+    this.prefilledAddress,
+  });
 
   @override
   State<AddDonationScreen> createState() => _AddDonationScreenState();
@@ -31,10 +47,11 @@ class _AddDonationScreenState extends State<AddDonationScreen> {
   final _originalPriceController = TextEditingController();
   final _discountedPriceController = TextEditingController();
 
-  FoodCategory _selectedCategory = FoodCategory.veg;
-  ListingType _listingType = ListingType.donateFree;
+  late FoodCategory _selectedCategory;
+  late ListingType _listingType;
   String _pickupWindow = '30 minutes';
   PickedLocation? _selectedLocation;
+  String? _selectedImagePath;
   String? _pickupAddressError;
   bool _isLoading = false;
 
@@ -44,6 +61,54 @@ class _AddDonationScreenState extends State<AddDonationScreen> {
     '45 minutes',
     '1 hour',
   ];
+
+  @override
+  void initState() {
+    super.initState();
+    final toEdit = widget.donationToEdit;
+
+    if (toEdit != null) {
+      _selectedCategory = toEdit.category;
+      _listingType = toEdit.listingType;
+      _pickupWindow = toEdit.pickupWindow;
+      _foodNameController.text = toEdit.title.split('·').first.trim();
+      _quantityController.text = toEdit.quantity.toString();
+      _servesController.text = toEdit.servesApprox;
+      _selectedImagePath = toEdit.imagePath;
+
+      if (toEdit.originalPrice != null) {
+        _originalPriceController.text = toEdit.originalPrice!.toString();
+      }
+      if (toEdit.discountedPrice != null) {
+        _discountedPriceController.text = toEdit.discountedPrice!.toString();
+      }
+
+      _selectedLocation = PickedLocation(
+        latitude: toEdit.pickupLatitude ?? 27.7215,
+        longitude: toEdit.pickupLongitude ?? 85.3206,
+        address: toEdit.pickupAddress,
+      );
+    } else {
+      _selectedCategory = widget.prefilledCategory ?? FoodCategory.veg;
+      _listingType = ListingType.donateFree;
+      if (widget.prefilledTitle != null) {
+        _foodNameController.text = widget.prefilledTitle!;
+      }
+      if (widget.prefilledQuantity != null) {
+        _quantityController.text = widget.prefilledQuantity!;
+      }
+      if (widget.prefilledServes != null) {
+        _servesController.text = widget.prefilledServes!;
+      }
+      if (widget.prefilledAddress != null) {
+        _selectedLocation = PickedLocation(
+          latitude: 27.7215,
+          longitude: 85.3206,
+          address: widget.prefilledAddress!,
+        );
+      }
+    }
+  }
 
   @override
   void dispose() {
@@ -63,8 +128,7 @@ class _AddDonationScreenState extends State<AddDonationScreen> {
           initialLocation: selectedLocation == null
               ? null
               : LatLng(selectedLocation.latitude, selectedLocation.longitude),
-          selectionHint:
-              'Tap anywhere on the map to select the pickup location.',
+          selectionHint: 'Tap anywhere on the map to select the pickup location.',
         ),
       ),
     );
@@ -82,22 +146,75 @@ class _AddDonationScreenState extends State<AddDonationScreen> {
     if (!_formKey.currentState!.validate()) return;
 
     if (_selectedLocation == null) {
-      setState(() => _pickupAddressError = 'Select pickup address on map');
+      setState(() => _pickupAddressError = 'Please select a pickup address on the map');
       return;
     }
 
     setState(() => _isLoading = true);
-    await Future<void>.delayed(const Duration(seconds: 1));
+    await Future<void>.delayed(const Duration(milliseconds: 600));
     if (!mounted) return;
 
-    setState(() => _isLoading = false);
-    Navigator.of(context).pushReplacement(
-      MaterialPageRoute(builder: (_) => const ListingSuccessScreen()),
-    );
-  }
+    final donationProvider = context.read<DonationProvider>();
+    final isEditing = widget.donationToEdit != null;
+    final foodName = _foodNameController.text.trim();
+    final quantity = int.tryParse(_quantityController.text.trim()) ?? 10;
+    final serves = _servesController.text.trim();
+    final originalPrice = double.tryParse(_originalPriceController.text.trim());
+    final discountedPrice = double.tryParse(_discountedPriceController.text.trim());
 
-  void _showMessage(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    if (isEditing) {
+      final updated = widget.donationToEdit!.copyWith(
+        title: '$foodName · $quantity Plates',
+        category: _selectedCategory,
+        quantity: quantity,
+        servesApprox: serves,
+        pickupAddress: _selectedLocation!.address,
+        pickupLatitude: _selectedLocation!.latitude,
+        pickupLongitude: _selectedLocation!.longitude,
+        pickupWindow: _pickupWindow,
+        listingType: _listingType,
+        originalPrice: originalPrice,
+        discountedPrice: discountedPrice,
+        imagePath: _selectedImagePath,
+      );
+      donationProvider.updateDonation(updated);
+
+      setState(() => _isLoading = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Donation updated successfully!'),
+          backgroundColor: AppColors.success,
+        ),
+      );
+      Navigator.of(context).pop();
+    } else {
+      final newDonation = DonationItem(
+        id: 'don_${DateTime.now().millisecondsSinceEpoch}',
+        postedAgo: 'Just now',
+        title: '$foodName · $quantity Plates',
+        category: _selectedCategory,
+        quantity: quantity,
+        quantityUnit: 'Plates',
+        servesApprox: serves.isNotEmpty ? serves : '$quantity people',
+        status: DonationStatus.awaitingClaim,
+        isActive: true,
+        pickupAddress: _selectedLocation!.address,
+        pickupLatitude: _selectedLocation!.latitude,
+        pickupLongitude: _selectedLocation!.longitude,
+        pickupWindow: _pickupWindow,
+        listingType: _listingType,
+        originalPrice: originalPrice,
+        discountedPrice: discountedPrice,
+        imagePath: _selectedImagePath,
+        receiptNumber: 'SP-DON-2026-${DateTime.now().millisecond}',
+      );
+      donationProvider.addDonation(newDonation);
+
+      setState(() => _isLoading = false);
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(builder: (_) => const ListingSuccessScreen()),
+      );
+    }
   }
 
   String? _required(String? value, String label) {
@@ -122,9 +239,7 @@ class _AddDonationScreenState extends State<AddDonationScreen> {
 
     final original = double.tryParse(originalText);
     final discounted = double.tryParse(value!.trim());
-    if (original != null &&
-        discounted != null &&
-        discounted >= original) {
+    if (original != null && discounted != null && discounted >= original) {
       return 'Must be less than original price';
     }
     return null;
@@ -132,10 +247,12 @@ class _AddDonationScreenState extends State<AddDonationScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isEditing = widget.donationToEdit != null;
+
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: DonorAppBar(
-        title: 'Add Donation',
+        title: isEditing ? 'Edit Donation' : 'Add Donation',
         onBack: () => Navigator.of(context).maybePop(),
       ),
       body: SafeArea(
@@ -150,7 +267,11 @@ class _AddDonationScreenState extends State<AddDonationScreen> {
                 onChanged: (category) => setState(() => _selectedCategory = category),
               ),
               const SizedBox(height: 20),
-              PhotoUploadArea(onTap: () => _showMessage('Photo upload coming soon.')),
+              PhotoUploadArea(
+                imagePath: _selectedImagePath,
+                onImageSelected: (path) => setState(() => _selectedImagePath = path),
+                onImageRemoved: () => setState(() => _selectedImagePath = null),
+              ),
               const SizedBox(height: 20),
               CustomTextField(
                 label: 'Food item name',
@@ -167,7 +288,13 @@ class _AddDonationScreenState extends State<AddDonationScreen> {
                       hintText: '10',
                       controller: _quantityController,
                       keyboardType: TextInputType.number,
-                      validator: (value) => _required(value, 'quantity'),
+                      validator: (value) {
+                        final req = _required(value, 'quantity');
+                        if (req != null) return req;
+                        final n = int.tryParse(value!.trim());
+                        if (n == null || n <= 0) return 'Invalid quantity';
+                        return null;
+                      },
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -183,7 +310,7 @@ class _AddDonationScreenState extends State<AddDonationScreen> {
               ),
               const SizedBox(height: 16),
               PickupWindowDropdown(
-                value: _pickupWindow,
+                initialValue: _pickupWindow,
                 options: _pickupOptions,
                 onChanged: (value) => setState(() => _pickupWindow = value),
               ),
@@ -207,7 +334,7 @@ class _AddDonationScreenState extends State<AddDonationScreen> {
                   children: [
                     Expanded(
                       child: CustomTextField(
-                        label: 'Original price',
+                        label: 'Original price (Rs)',
                         hintText: 'e.g. 500',
                         controller: _originalPriceController,
                         keyboardType: const TextInputType.numberWithOptions(
@@ -219,7 +346,7 @@ class _AddDonationScreenState extends State<AddDonationScreen> {
                     const SizedBox(width: 12),
                     Expanded(
                       child: CustomTextField(
-                        label: 'Price after discount',
+                        label: 'Price after discount (Rs)',
                         hintText: 'e.g. 200',
                         controller: _discountedPriceController,
                         keyboardType: const TextInputType.numberWithOptions(
@@ -239,7 +366,7 @@ class _AddDonationScreenState extends State<AddDonationScreen> {
               ),
               const SizedBox(height: 28),
               PrimaryButton(
-                text: 'Post donation',
+                text: isEditing ? 'Save Changes' : 'Post donation',
                 isLoading: _isLoading,
                 onPressed: _submitDonation,
               ),

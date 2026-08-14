@@ -1,10 +1,18 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 import '../../core/constants/app_colors.dart';
+import '../../models/contribution_model.dart';
+import '../../models/nearby_ngo_model.dart';
+import '../../providers/donation_provider.dart';
 import '../../widgets/donor/donor_bottom_navigation.dart';
+import 'contribution_detail_screen.dart';
+import 'contribution_list_screen.dart';
 import 'donor_notifications_screen.dart';
 import 'donor_profile_screen.dart';
 import 'my_donations_screen.dart';
+import 'nearby_ngos_list_screen.dart';
+import 'ngo_detail_screen.dart';
 
 class DonorHomeScreen extends StatefulWidget {
   const DonorHomeScreen({super.key, this.initialTab = 0});
@@ -35,7 +43,19 @@ class _DonorHomeScreenState extends State<DonorHomeScreen> {
       body: IndexedStack(
         index: _selectedTab,
         children: [
-          _DonorHomeTab(onNotificationsTap: () => _onTabSelected(2)),
+          _DonorHomeTab(
+            onNotificationsTap: () => _onTabSelected(2),
+            onViewAllContributions: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const ContributionListScreen()),
+              );
+            },
+            onViewNearbyNgos: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const NearbyNgosListScreen()),
+              );
+            },
+          ),
           const MyDonationsScreen(),
           const DonorNotificationsScreen(),
           const DonorProfileScreen(),
@@ -50,29 +70,40 @@ class _DonorHomeScreenState extends State<DonorHomeScreen> {
 }
 
 class _DonorHomeTab extends StatelessWidget {
-  const _DonorHomeTab({required this.onNotificationsTap});
+  const _DonorHomeTab({
+    required this.onNotificationsTap,
+    required this.onViewAllContributions,
+    required this.onViewNearbyNgos,
+  });
 
   final VoidCallback onNotificationsTap;
-
-  void _showMessage(BuildContext context, String message) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
-  }
+  final VoidCallback onViewAllContributions;
+  final VoidCallback onViewNearbyNgos;
 
   @override
   Widget build(BuildContext context) {
+    final donationProvider = context.watch<DonationProvider>();
+    final recentContribution = donationProvider.contributions.isNotEmpty
+        ? donationProvider.contributions.first
+        : ContributionItem.mockContributions.first;
+
+    final ngos = donationProvider.nearbyNgos;
+    final firstNgo = ngos.isNotEmpty ? ngos[0] : NearbyNgo.mockNgos[0];
+    final secondNgo = ngos.length > 1 ? ngos[1] : NearbyNgo.mockNgos[1];
+
     return SafeArea(
       child: LayoutBuilder(
         builder: (context, constraints) {
-          final contentHeight = constraints.maxHeight * 0.8;
+          final contentHeight = constraints.maxHeight * 0.82;
 
           return Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Padding(
-                padding: const EdgeInsets.fromLTRB(20, 24, 20, 0),
+                padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
                 child: _DonorHomeHeader(onNotificationsTap: onNotificationsTap),
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 14),
               SizedBox(
                 height: contentHeight,
                 child: Padding(
@@ -83,48 +114,66 @@ class _DonorHomeTab extends StatelessWidget {
                       Expanded(
                         flex: 4,
                         child: _CampaignCard(
-                          onViewMore: () =>
-                              _showMessage(context, 'Opening campaign details.'),
+                          onViewMore: onViewNearbyNgos,
                         ),
                       ),
-                      const SizedBox(height: 16),
+                      const SizedBox(height: 14),
                       _SectionHeader(
                         title: 'Recent Contribution',
                         actionLabel: 'View all',
-                        onActionTap: () => _showMessage(
-                          context,
-                          'Opening your contributions.',
+                        onActionTap: onViewAllContributions,
+                      ),
+                      const SizedBox(height: 8),
+                      Expanded(
+                        flex: 3,
+                        child: _ContributionCard(
+                          contribution: recentContribution,
+                          onTap: () {
+                            Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) => ContributionDetailScreen(
+                                  contribution: recentContribution,
+                                ),
+                              ),
+                            );
+                          },
                         ),
                       ),
-                      const SizedBox(height: 10),
-                      const Expanded(
-                        flex: 3,
-                        child: _ContributionCard(),
-                      ),
-                      const SizedBox(height: 16),
+                      const SizedBox(height: 14),
                       _SectionHeader(
                         title: 'NGOs Near You',
                         actionLabel: 'See more',
-                        onActionTap: () =>
-                            _showMessage(context, 'Opening nearby NGOs.'),
+                        onActionTap: onViewNearbyNgos,
                       ),
-                      const SizedBox(height: 10),
-                      const Expanded(
+                      const SizedBox(height: 8),
+                      Expanded(
                         flex: 3,
                         child: Row(
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
                             Expanded(
                               child: _NearbyNgoCard(
-                                name: 'Aasha Foundation',
-                                color: Color(0xFFF5E8F6),
+                                ngo: firstNgo,
+                                onTap: () {
+                                  Navigator.of(context).push(
+                                    MaterialPageRoute(
+                                      builder: (_) => NgoDetailScreen(ngo: firstNgo),
+                                    ),
+                                  );
+                                },
                               ),
                             ),
-                            SizedBox(width: 12),
+                            const SizedBox(width: 12),
                             Expanded(
                               child: _NearbyNgoCard(
-                                name: 'Gautam Buddha Fdn',
-                                color: Color(0xFFE5F4EA),
+                                ngo: secondNgo,
+                                onTap: () {
+                                  Navigator.of(context).push(
+                                    MaterialPageRoute(
+                                      builder: (_) => NgoDetailScreen(ngo: secondNgo),
+                                    ),
+                                  );
+                                },
                               ),
                             ),
                           ],
@@ -137,68 +186,6 @@ class _DonorHomeTab extends StatelessWidget {
             ],
           );
         },
-      ),
-    );
-  }
-}
-
-class _DonorPlaceholderTab extends StatelessWidget {
-  const _DonorPlaceholderTab({
-    required this.icon,
-    required this.title,
-    required this.subtitle,
-  });
-
-  final IconData icon;
-  final String title;
-  final String subtitle;
-
-  @override
-  Widget build(BuildContext context) {
-    return SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(20, 24, 20, 0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              title,
-              style: const TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
-                color: AppColors.textPrimary,
-              ),
-            ),
-            const Spacer(),
-            Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(icon, size: 48, color: AppColors.textSecondary),
-                  const SizedBox(height: 16),
-                  Text(
-                    subtitle,
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(
-                      fontSize: 14,
-                      color: AppColors.textSecondary,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  const Text(
-                    'Coming soon',
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.primaryEmerald,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const Spacer(flex: 2),
-          ],
-        ),
       ),
     );
   }
@@ -219,7 +206,7 @@ class _DonorHomeHeader extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'Hi',
+                'Hi, Welcome back',
                 style: TextStyle(
                   color: AppColors.textSecondary,
                   fontSize: 14,
@@ -227,7 +214,7 @@ class _DonorHomeHeader extends StatelessWidget {
               ),
               SizedBox(height: 2),
               Text(
-                'You are a donor',
+                'Food Donor Dashboard',
                 style: TextStyle(
                   color: AppColors.textPrimary,
                   fontSize: 20,
@@ -284,17 +271,17 @@ class _CampaignCard extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.end,
         children: [
           const Text(
-            "Support campaign cost for\nchildren's school",
+            "Support campaign cost for\nchildren's school meals",
             style: TextStyle(
               color: Colors.white,
               fontWeight: FontWeight.bold,
-              fontSize: 20,
+              fontSize: 19,
               height: 1.2,
             ),
           ),
-          const SizedBox(height: 14),
+          const SizedBox(height: 12),
           SizedBox(
-            height: 38,
+            height: 36,
             child: ElevatedButton(
               onPressed: onViewMore,
               style: ElevatedButton.styleFrom(
@@ -307,8 +294,8 @@ class _CampaignCard extends StatelessWidget {
                 ),
               ),
               child: const Text(
-                'View more →',
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                'Explore NGOs →',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
               ),
             ),
           ),
@@ -350,7 +337,7 @@ class _SectionHeader extends StatelessWidget {
             minimumSize: const Size(44, 28),
             tapTargetSize: MaterialTapTargetSize.shrinkWrap,
           ),
-          child: Text(actionLabel, style: const TextStyle(fontSize: 13)),
+          child: Text(actionLabel, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
         ),
       ],
     );
@@ -358,57 +345,87 @@ class _SectionHeader extends StatelessWidget {
 }
 
 class _ContributionCard extends StatelessWidget {
-  const _ContributionCard();
+  final ContributionItem contribution;
+  final VoidCallback onTap;
+
+  const _ContributionCard({
+    required this.contribution,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
+    return Material(
+      color: AppColors.surface,
+      borderRadius: BorderRadius.circular(14),
+      child: InkWell(
+        onTap: onTap,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppColors.border),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 64,
-            height: 64,
-            decoration: BoxDecoration(
-              color: const Color(0xFFE2F2E8),
-              borderRadius: BorderRadius.circular(10),
-            ),
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: AppColors.border),
           ),
-          const SizedBox(width: 14),
-          const Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Text(
-                  'Rampur Aasthaliya Org',
-                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
-                ),
-                SizedBox(height: 6),
-                Text(
-                  'Rice with curry · 10 Plate',
-                  style: TextStyle(
-                    fontSize: 13,
-                    color: AppColors.textSecondary,
+          child: Row(
+            children: [
+              Container(
+                width: 58,
+                height: 58,
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: contribution.bannerGradient,
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
                   ),
+                  borderRadius: BorderRadius.circular(10),
                 ),
-                SizedBox(height: 8),
-                _StatusChip(label: 'Completed'),
-              ],
-            ),
+                child: const Icon(Icons.restaurant, color: Colors.white, size: 24),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      contribution.recipientName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      contribution.title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    _StatusChip(label: contribution.statusLabel),
+                  ],
+                ),
+              ),
+              Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    contribution.dateAgo,
+                    textAlign: TextAlign.right,
+                    style: const TextStyle(fontSize: 11, color: AppColors.textSecondary),
+                  ),
+                  const SizedBox(height: 4),
+                  const Icon(Icons.chevron_right, size: 18, color: AppColors.textSecondary),
+                ],
+              ),
+            ],
           ),
-          Text(
-            '3 days\nago',
-            textAlign: TextAlign.right,
-            style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
-          ),
-        ],
+        ),
       ),
     );
   }
@@ -422,16 +439,16 @@ class _StatusChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
         color: const Color(0xFFE4F6E9),
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(6),
       ),
       child: Text(
         label,
         style: const TextStyle(
           color: AppColors.primary,
-          fontSize: 11,
+          fontSize: 10,
           fontWeight: FontWeight.bold,
         ),
       ),
@@ -440,41 +457,60 @@ class _StatusChip extends StatelessWidget {
 }
 
 class _NearbyNgoCard extends StatelessWidget {
-  const _NearbyNgoCard({required this.name, required this.color});
+  const _NearbyNgoCard({required this.ngo, required this.onTap});
 
-  final String name;
-  final Color color;
+  final NearbyNgo ngo;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(10),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
+    return Material(
+      color: AppColors.surface,
+      borderRadius: BorderRadius.circular(12),
+      child: InkWell(
+        onTap: onTap,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.border),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Expanded(
-            child: Container(
-              width: double.infinity,
-              decoration: BoxDecoration(
-                color: color,
-                borderRadius: BorderRadius.circular(10),
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: AppColors.border),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Container(
+                  width: double.infinity,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: ngo.bannerGradient,
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Center(
+                    child: Icon(Icons.apartment, color: Colors.white, size: 24),
+                  ),
+                ),
               ),
-            ),
+              const SizedBox(height: 8),
+              Text(
+                ngo.name,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                ngo.distanceLabel,
+                style: const TextStyle(fontSize: 10, color: AppColors.textSecondary),
+              ),
+            ],
           ),
-          const SizedBox(height: 10),
-          Text(
-            name,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
-          ),
-        ],
+        ),
       ),
     );
   }

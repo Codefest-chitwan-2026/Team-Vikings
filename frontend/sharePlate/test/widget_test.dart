@@ -1,30 +1,39 @@
-// // This is a basic Flutter widget test.
-// //
-// // To perform an interaction with a widget in your test, use the WidgetTester
-// // utility in the flutter_test package. For example, you can send tap and scroll
-// // gestures. You can also use WidgetTester to find child widgets in the widget
-// // tree, read text, and verify that the values of widget properties are correct.
-//
-// import 'package:flutter/material.dart';
-// import 'package:flutter_test/flutter_test.dart';
-//
-// import 'package:shareplate/main.dart';
-//
-// void main() {
-//   testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-//     // Build our app and trigger a frame.
-//     await tester.pumpWidget(const MyApp());
-//
-//     // Verify that our counter starts at 0.
-//     expect(find.text('0'), findsOneWidget);
-//     expect(find.text('1'), findsNothing);
-//
-//     // Tap the '+' icon and trigger a frame.
-//     await tester.tap(find.byIcon(Icons.add));
-//     await tester.pump();
-//
-//     // Verify that our counter has incremented.
-//     expect(find.text('0'), findsNothing);
-//     expect(find.text('1'), findsOneWidget);
-//   });
-// }
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:shareplate/models/verification_document_model.dart';
+import 'package:shareplate/widgets/shared/profile_widgets.dart';
+
+void main() {
+  testWidgets('ProfileHeader renders initials and name', (WidgetTester tester) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(
+          body: ProfileHeader(
+            initials: 'AF',
+            name: 'Aasha Foundation',
+            subtitle: 'Recipient · NGO',
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('Aasha Foundation'), findsOneWidget);
+    expect(find.text('Recipient · NGO'), findsOneWidget);
+    expect(find.text('AF'), findsOneWidget);
+  });
+
+  test('VerificationDocumentModel default documents exist and copyWith works', () {
+    final docs = VerificationDocumentModel.defaultBusinessDocuments();
+    expect(docs.isNotEmpty, isTrue);
+
+    final first = docs.first;
+    final updated = first.copyWith(
+      fileName: 'updated_certificate.png',
+      status: VerificationDocumentStatus.pending,
+    );
+
+    expect(updated.fileName, 'updated_certificate.png');
+    expect(updated.status, VerificationDocumentStatus.pending);
+    expect(updated.id, first.id);
+  });
+}

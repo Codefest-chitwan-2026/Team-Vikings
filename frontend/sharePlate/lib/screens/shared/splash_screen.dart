@@ -1,8 +1,13 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
+import '../../models/user_model.dart';
+import '../../providers/auth_provider.dart';
+import '../consumer/consumer_home_screen.dart';
+import '../donor/donor_home_screen.dart';
+import '../recipient/recipient_home_screen.dart';
 import 'login_screen.dart';
-import 'onboarding_screen.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -15,13 +20,42 @@ class _SplashScreenState extends State<SplashScreen> {
   @override
   void initState() {
     super.initState();
-    Timer(const Duration(milliseconds: 2500), () {
-      if (mounted) {
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (_) => const LoginScreen()),
-        );
+    _checkAuthAndNavigate();
+  }
+
+  Future<void> _checkAuthAndNavigate() async {
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    
+    // Check local token & initialize auth state
+    await Future.wait([
+      authProvider.initAuth(),
+      Future.delayed(const Duration(milliseconds: 2000)),
+    ]);
+
+    if (!mounted) return;
+
+    if (authProvider.isAuthenticated && authProvider.currentUser != null) {
+      final user = authProvider.currentUser!;
+      Widget targetScreen;
+      switch (user.role) {
+        case UserRole.donor:
+          targetScreen = const DonorHomeScreen();
+          break;
+        case UserRole.ngo:
+          targetScreen = const RecipientHomeScreen();
+          break;
+        case UserRole.consumer:
+          targetScreen = const ConsumerHomeScreen();
+          break;
       }
-    });
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(builder: (_) => targetScreen),
+      );
+    } else {
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(builder: (_) => const LoginScreen()),
+      );
+    }
   }
 
   @override
@@ -63,7 +97,6 @@ class _SplashScreenState extends State<SplashScreen> {
                   'assets/images/logo.png',
                   fit: BoxFit.contain,
                   errorBuilder: (context, error, stackTrace) {
-                    // Fallback visual icon if PNG asset is missing initially
                     return const Icon(
                       Icons.location_on_rounded,
                       color: Colors.white,

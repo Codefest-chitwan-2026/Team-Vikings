@@ -1,8 +1,11 @@
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:provider/provider.dart';
 
 import '../../core/constants/app_colors.dart';
 import '../../models/picked_location.dart';
+import '../../providers/auth_provider.dart';
 import '../../widgets/login_screen/primary_button.dart';
 import '../../widgets/shared/custom_text_field.dart';
 import '../../widgets/shared/profile/edit_avatar_picker.dart';
@@ -11,8 +14,6 @@ import '../../widgets/shared/profile/simple_app_bar.dart';
 import '../shared/map_address_picker_screen.dart';
 
 /// Edit Profile screen for the donor role.
-/// TODO: pre-fill the controllers from the signed-in BusinessRegistrationModel
-/// / UserModel and submit changes through the profile update API once available.
 class DonorEditProfileScreen extends StatefulWidget {
   const DonorEditProfileScreen({super.key});
 
@@ -22,14 +23,37 @@ class DonorEditProfileScreen extends StatefulWidget {
 
 class _DonorEditProfileScreenState extends State<DonorEditProfileScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _businessNameController = TextEditingController(text: 'Chitwan Black Forest');
-  final _contactNameController = TextEditingController(text: 'Sujan Gurung');
-  final _phoneController = TextEditingController(text: '9800000000');
-  final _emailController = TextEditingController(text: 'contact@chitwanblackforest.com');
-  final _addressController = TextEditingController(text: 'Bharatpur-10, Chitwan');
+  late final TextEditingController _businessNameController;
+  late final TextEditingController _contactNameController;
+  late final TextEditingController _phoneController;
+  late final TextEditingController _emailController;
+  late final TextEditingController _addressController;
 
   PickedLocation? _selectedLocation;
+  String? _avatarPath;
   bool _isSaving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    final auth = context.read<AuthProvider>();
+    final user = auth.currentUser;
+
+    final bizName = user?.organizationName != null && user!.organizationName!.isNotEmpty
+        ? user.organizationName!
+        : (user?.displayName.isNotEmpty == true ? user!.displayName : 'Himalayan Bites Cafe');
+    final contactName = user?.name.isNotEmpty == true ? user!.name : 'Sujan Gurung';
+    final phone = user?.phone.isNotEmpty == true ? user!.phone : '9800000000';
+    final email = user?.email.isNotEmpty == true ? user!.email : 'contact@himalayanbites.com';
+    final address = user?.address ?? 'Bharatpur-10, Chitwan';
+    _avatarPath = user?.profileData?['avatar_path'] as String?;
+
+    _businessNameController = TextEditingController(text: bizName);
+    _contactNameController = TextEditingController(text: contactName);
+    _phoneController = TextEditingController(text: phone);
+    _emailController = TextEditingController(text: email);
+    _addressController = TextEditingController(text: address);
+  }
 
   @override
   void dispose() {
@@ -61,24 +85,53 @@ class _DonorEditProfileScreenState extends State<DonorEditProfileScreen> {
     });
   }
 
+  Future<void> _pickAvatar() async {
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['jpg', 'jpeg', 'png'],
+        allowMultiple: false,
+      );
+
+      if (result != null && result.files.isNotEmpty) {
+        final path = result.files.single.path;
+        if (path != null && path.isNotEmpty) {
+          setState(() => _avatarPath = path);
+        }
+      }
+    } catch (_) {}
+  }
+
   Future<void> _saveChanges() async {
     FocusScope.of(context).unfocus();
     if (!_formKey.currentState!.validate()) return;
 
     setState(() => _isSaving = true);
-    // Replace this with the profile update API call when available.
-    await Future<void>.delayed(const Duration(seconds: 1));
+
+    final authProvider = context.read<AuthProvider>();
+    authProvider.updateUserProfile(
+      organizationName: _businessNameController.text.trim(),
+      name: _contactNameController.text.trim(),
+      phone: _phoneController.text.trim(),
+      email: _emailController.text.trim(),
+      address: _addressController.text.trim(),
+      additionalProfileData: {
+        if (_avatarPath != null) 'avatar_path': _avatarPath,
+      },
+    );
+
+    await Future<void>.delayed(const Duration(milliseconds: 350));
     if (!mounted) return;
 
     setState(() => _isSaving = false);
-    ScaffoldMessenger.of(context)
-        .showSnackBar(const SnackBar(content: Text('Profile updated.')));
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Profile updated successfully!'),
+        backgroundColor: AppColors.success,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
     Navigator.of(context).maybePop();
-  }
-
-  void _onAvatarTap() {
-    ScaffoldMessenger.of(context)
-        .showSnackBar(const SnackBar(content: Text('Photo upload coming soon.')));
   }
 
   String? _required(String? value, String label) {
@@ -100,6 +153,10 @@ class _DonorEditProfileScreenState extends State<DonorEditProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final auth = context.watch<AuthProvider>();
+    final user = auth.currentUser;
+    final initials = user?.initials ?? 'HB';
+
     return Scaffold(
       backgroundColor: AppColors.white,
       appBar: const SimpleAppBar(title: 'Edit profile'),
@@ -110,7 +167,11 @@ class _DonorEditProfileScreenState extends State<DonorEditProfileScreen> {
           child: ListView(
             padding: const EdgeInsets.fromLTRB(24, 20, 24, 20),
             children: [
-              EditAvatarPicker(initials: 'CB', onTap: _onAvatarTap),
+              EditAvatarPicker(
+                initials: initials,
+                imagePath: _avatarPath,
+                onTap: _pickAvatar,
+              ),
               const SizedBox(height: 28),
               CustomTextField(
                 label: 'Business name',

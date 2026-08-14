@@ -6,7 +6,6 @@ import '../../widgets/role_selection/role_card.dart';
 import '../auth/business_signup_screen.dart';
 import '../auth/consumer_signup_screen.dart';
 import '../auth/ngo_signup_screen.dart';
-import 'login_screen.dart';
 
 class RoleSelectionScreen extends StatefulWidget {
   const RoleSelectionScreen({super.key});
@@ -91,7 +90,7 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen> {
                       role: UserRole.donor,
                       title: 'Donor — Food business',
                       subtitle:
-                      'Hotels, restaurants, cafés, bakeries & party palaces posting surplus food.',
+                          'Hotels, restaurants, cafés, bakeries & party palaces posting surplus food.',
                       icon: Icons.home_work_outlined,
                       isSelected: _selectedRole == UserRole.donor,
                       onTap: () => setState(() => _selectedRole = UserRole.donor),
@@ -101,7 +100,7 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen> {
                       role: UserRole.ngo,
                       title: 'Verified NGO / Shelter',
                       subtitle:
-                      'Orphanages, elderly homes and community kitchens with priority claim access.',
+                          'Orphanages, elderly homes and community kitchens with priority claim access.',
                       icon: Icons.location_on_outlined,
                       isSelected: _selectedRole == UserRole.ngo,
                       onTap: () => setState(() => _selectedRole = UserRole.ngo),
@@ -111,7 +110,7 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen> {
                       role: UserRole.consumer,
                       title: 'Consumer',
                       subtitle:
-                      'Grab quality meals nearby at flash-sale prices before they expire.',
+                          'Grab quality meals nearby at flash-sale prices before they expire.',
                       icon: Icons.shopping_bag_outlined,
                       isSelected: _selectedRole == UserRole.consumer,
                       onTap: () => setState(() => _selectedRole = UserRole.consumer),
@@ -121,7 +120,7 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen> {
                     // Modular Info Banner Widget
                     const InfoBanner(
                       message:
-                      'NGO accounts need document verification. Approval usually takes under 24 hours.',
+                          'NGO accounts need document verification. Approval usually takes under 24 hours.',
                     ),
                   ],
                 ),

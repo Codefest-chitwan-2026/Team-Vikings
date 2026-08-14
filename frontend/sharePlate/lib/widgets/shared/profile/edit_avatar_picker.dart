@@ -1,22 +1,28 @@
+import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../../../core/constants/app_colors.dart';
 
-/// Circular initials avatar with a camera "edit" badge, shown at the top of
-/// every role's Edit Profile screen. Tapping it is a stub for now — wire
-/// [onTap] to an image picker once photo upload is supported by the API.
+/// Circular initials/photo avatar with a camera "edit" badge, shown at the top of
+/// every role's Edit Profile screen.
 class EditAvatarPicker extends StatelessWidget {
   const EditAvatarPicker({
     super.key,
     required this.initials,
     required this.onTap,
+    this.imagePath,
   });
 
   final String initials;
   final VoidCallback onTap;
+  final String? imagePath;
 
   @override
   Widget build(BuildContext context) {
+    final hasImage = imagePath != null && imagePath!.isNotEmpty;
+    final isLocalFile = hasImage && !kIsWeb && File(imagePath!).existsSync();
+
     return Center(
       child: GestureDetector(
         onTap: onTap,
@@ -30,14 +36,16 @@ class EditAvatarPicker extends StatelessWidget {
                 color: AppColors.cardLightBg,
                 shape: BoxShape.circle,
               ),
-              alignment: Alignment.center,
-              child: Text(
-                initials,
-                style: const TextStyle(
-                  fontSize: 26,
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.primary,
-                ),
+              child: ClipOval(
+                child: isLocalFile
+                    ? Image.file(
+                        File(imagePath!),
+                        width: 88,
+                        height: 88,
+                        fit: BoxFit.cover,
+                        errorBuilder: (context, error, stackTrace) => _initialsWidget(),
+                      )
+                    : _initialsWidget(),
               ),
             ),
             Positioned(
@@ -47,7 +55,7 @@ class EditAvatarPicker extends StatelessWidget {
                 width: 30,
                 height: 30,
                 decoration: BoxDecoration(
-                  color: AppColors.primary,
+                  color: AppColors.primaryEmerald,
                   shape: BoxShape.circle,
                   border: Border.all(color: AppColors.white, width: 2),
                 ),
@@ -59,6 +67,19 @@ class EditAvatarPicker extends StatelessWidget {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _initialsWidget() {
+    return Center(
+      child: Text(
+        initials,
+        style: const TextStyle(
+          fontSize: 26,
+          fontWeight: FontWeight.bold,
+          color: AppColors.primaryEmerald,
         ),
       ),
     );

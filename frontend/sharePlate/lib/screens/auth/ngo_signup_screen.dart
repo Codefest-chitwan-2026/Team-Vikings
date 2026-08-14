@@ -1,10 +1,12 @@
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:provider/provider.dart';
 
 import '../../core/constants/app_colors.dart';
 import '../../models/ngo_model.dart';
 import '../../models/picked_location.dart';
+import '../../providers/auth_provider.dart';
 import '../../widgets/login_screen/primary_button.dart';
 import '../../widgets/shared/custom_text_field.dart';
 import '../../widgets/shared/document_upload_tile.dart';
@@ -30,7 +32,17 @@ class _NgoSignUpScreenState extends State<NgoSignUpScreen> {
   final _panController = TextEditingController();
 
   PickedLocation? _selectedLocation;
-  bool _isLoading = false;
+
+  String? _nameError;
+  String? _contactNameError;
+  String? _phoneError;
+  String? _emailError;
+  String? _passwordError;
+  String? _addressError;
+  String? _panError;
+  String? _locationError;
+  String? _documentError;
+  String? _generalError;
 
   @override
   void dispose() {
@@ -60,6 +72,7 @@ class _NgoSignUpScreenState extends State<NgoSignUpScreen> {
 
     setState(() {
       _selectedLocation = result;
+      _locationError = null;
       _ngoModel
         ..latitude = result.latitude
         ..longitude = result.longitude;
@@ -69,29 +82,68 @@ class _NgoSignUpScreenState extends State<NgoSignUpScreen> {
 
   Future<void> _submitForReview() async {
     FocusScope.of(context).unfocus();
-    if (!_formKey.currentState!.validate()) return;
+    setState(() {
+      _nameError = null;
+      _contactNameError = null;
+      _phoneError = null;
+      _emailError = null;
+      _passwordError = null;
+      _addressError = null;
+      _panError = null;
+      _locationError = null;
+      _documentError = null;
+      _generalError = null;
+    });
+
+    final isValid = _formKey.currentState!.validate();
+    bool hasMissingCustom = false;
 
     if (_selectedLocation == null) {
-      _showMessage('Please pin your organization location on the map.');
-      return;
+      setState(() => _locationError = 'Please pin your organization location on the map.');
+      hasMissingCustom = true;
     }
 
-    if (_ngoModel.documentName == null) {
-      _showMessage('Please add the registration certificate or PAN document.');
-      return;
+    if (_ngoModel.documentPath == null) {
+      setState(() => _documentError = 'Please add the registration certificate or PAN document.');
+      hasMissingCustom = true;
     }
 
-    setState(() => _isLoading = true);
+    if (!isValid || hasMissingCustom) return;
+
     _saveFormData();
 
-    // Replace this with the registration API call when the backend is connected.
-    await Future<void>.delayed(const Duration(seconds: 2));
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+
+    final success = await authProvider.registerNgo(
+      model: _ngoModel,
+    );
+
     if (!mounted) return;
 
-    setState(() => _isLoading = false);
-    Navigator.of(context).pushReplacement(
-      MaterialPageRoute(builder: (_) => const RecipientHomeScreen()),
-    );
+    if (success) {
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (_) => const RecipientHomeScreen()),
+        (route) => false,
+      );
+    } else {
+      final error = authProvider.errorMessage ?? 'Registration failed. Please check your details.';
+      setState(() {
+        final errLower = error.toLowerCase();
+        if (errLower.contains('phone')) {
+          _phoneError = error;
+        } else if (errLower.contains('email')) {
+          _emailError = error;
+        } else if (errLower.contains('password')) {
+          _passwordError = error;
+        } else if (errLower.contains('pan')) {
+          _panError = error;
+        } else if (errLower.contains('name') || errLower.contains('organization')) {
+          _nameError = error;
+        } else {
+          _generalError = error;
+        }
+      });
+    }
   }
 
   Future<void> _pickDocument() async {
@@ -109,6 +161,7 @@ class _NgoSignUpScreenState extends State<NgoSignUpScreen> {
       _ngoModel
         ..documentPath = file.path
         ..documentName = file.name;
+      _documentError = null;
     });
   }
 
@@ -121,10 +174,6 @@ class _NgoSignUpScreenState extends State<NgoSignUpScreen> {
       ..password = _passwordController.text
       ..addressText = _addressController.text.trim()
       ..panNumber = _panController.text.trim();
-  }
-
-  void _showMessage(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
   }
 
   String? _required(String? value, String field) {
@@ -152,6 +201,8 @@ class _NgoSignUpScreenState extends State<NgoSignUpScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final authProvider = context.watch<AuthProvider>();
+
     return Scaffold(
       backgroundColor: AppColors.white,
       appBar: AppBar(
@@ -194,12 +245,54 @@ class _NgoSignUpScreenState extends State<NgoSignUpScreen> {
                 'We review this information before your organization can receive donations.',
                 style: TextStyle(color: AppColors.textSecondary, height: 1.4),
               ),
+              if (_generalError != null) ...[
+                const SizedBox(height: 16),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: AppColors.error.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: AppColors.error.withValues(alpha: 0.3)),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.error_outline, color: AppColors.error, size: 20),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          _generalError!,
+                          style: const TextStyle(
+                            color: AppColors.error,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
               const SizedBox(height: 24),
               CustomTextField(
                 label: 'Organization name',
                 hintText: 'Aasha Foundation Nepal',
                 controller: _nameController,
+                errorText: _nameError,
+                onChanged: (_) {
+                  if (_nameError != null) setState(() => _nameError = null);
+                },
                 validator: (value) => _required(value, 'organization name'),
+              ),
+              const SizedBox(height: 16),
+              CustomTextField(
+                label: 'Contact person name',
+                hintText: 'Representative full name',
+                controller: _contactNameController,
+                errorText: _contactNameError,
+                onChanged: (_) {
+                  if (_contactNameError != null) setState(() => _contactNameError = null);
+                },
+                validator: (value) => _required(value, 'contact person name'),
               ),
               const SizedBox(height: 16),
               CustomTextField(
@@ -207,6 +300,10 @@ class _NgoSignUpScreenState extends State<NgoSignUpScreen> {
                 hintText: '98XXXXXXXX',
                 controller: _phoneController,
                 keyboardType: TextInputType.phone,
+                errorText: _phoneError,
+                onChanged: (_) {
+                  if (_phoneError != null) setState(() => _phoneError = null);
+                },
                 validator: _validatePhone,
               ),
               const SizedBox(height: 16),
@@ -215,6 +312,10 @@ class _NgoSignUpScreenState extends State<NgoSignUpScreen> {
                 hintText: 'contact@organization.org',
                 controller: _emailController,
                 keyboardType: TextInputType.emailAddress,
+                errorText: _emailError,
+                onChanged: (_) {
+                  if (_emailError != null) setState(() => _emailError = null);
+                },
                 validator: _validateEmail,
               ),
               const SizedBox(height: 16),
@@ -223,6 +324,10 @@ class _NgoSignUpScreenState extends State<NgoSignUpScreen> {
                 hintText: 'At least 8 characters',
                 controller: _passwordController,
                 isPassword: true,
+                errorText: _passwordError,
+                onChanged: (_) {
+                  if (_passwordError != null) setState(() => _passwordError = null);
+                },
                 validator: _validatePassword,
               ),
               const SizedBox(height: 16),
@@ -230,13 +335,37 @@ class _NgoSignUpScreenState extends State<NgoSignUpScreen> {
                 label: 'Address',
                 hintText: 'Street, ward number, district',
                 controller: _addressController,
+                errorText: _addressError,
+                onChanged: (_) {
+                  if (_addressError != null) setState(() => _addressError = null);
+                },
                 validator: (value) => _required(value, 'address'),
-
               ),
               const SizedBox(height: 12),
-              _LocationPickerTile(
-                location: _selectedLocation,
-                onTap: _openMapPicker,
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(12),
+                      border: _locationError != null ? Border.all(color: AppColors.error, width: 1.5) : null,
+                    ),
+                    child: _LocationPickerTile(
+                      location: _selectedLocation,
+                      onTap: _openMapPicker,
+                    ),
+                  ),
+                  if (_locationError != null) ...[
+                    const SizedBox(height: 6),
+                    Padding(
+                      padding: const EdgeInsets.only(left: 4),
+                      child: Text(
+                        _locationError!,
+                        style: const TextStyle(color: AppColors.error, fontSize: 12, fontWeight: FontWeight.w500),
+                      ),
+                    ),
+                  ],
+                ],
               ),
               const SizedBox(height: 20),
               const Text(
@@ -269,6 +398,10 @@ class _NgoSignUpScreenState extends State<NgoSignUpScreen> {
                 label: 'Registration / PAN number',
                 hintText: 'e.g. 601234567',
                 controller: _panController,
+                errorText: _panError,
+                onChanged: (_) {
+                  if (_panError != null) setState(() => _panError = null);
+                },
                 validator: (value) => _required(value, 'PAN or registration number'),
               ),
               const SizedBox(height: 24),
@@ -286,20 +419,40 @@ class _NgoSignUpScreenState extends State<NgoSignUpScreen> {
                 style: TextStyle(color: AppColors.textSecondary),
               ),
               const SizedBox(height: 12),
-              DocumentUploadTile(
-                title: 'Verification certificate',
-                subtitle: 'SWC or official registration certificate',
-                fileName: _ngoModel.documentName,
-                isUploaded: _ngoModel.documentName != null,
-                onTap: _pickDocument,
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(12),
+                      border: _documentError != null ? Border.all(color: AppColors.error, width: 1.5) : null,
+                    ),
+                    child: DocumentUploadTile(
+                      title: 'Verification certificate',
+                      subtitle: 'SWC or official registration certificate',
+                      fileName: _ngoModel.documentName,
+                      isUploaded: _ngoModel.documentName != null,
+                      onTap: _pickDocument,
+                    ),
+                  ),
+                  if (_documentError != null) ...[
+                    const SizedBox(height: 6),
+                    Padding(
+                      padding: const EdgeInsets.only(left: 4),
+                      child: Text(
+                        _documentError!,
+                        style: const TextStyle(color: AppColors.error, fontSize: 12, fontWeight: FontWeight.w500),
+                      ),
+                    ),
+                  ],
+                ],
               ),
-
               const SizedBox(height: 4),
               const _VerificationNotice(),
               const SizedBox(height: 28),
               PrimaryButton(
                 text: 'Submit for review',
-                isLoading: _isLoading,
+                isLoading: authProvider.isLoading,
                 onPressed: _submitForReview,
               ),
             ],
@@ -322,7 +475,6 @@ class _NgoSignUpScreenState extends State<NgoSignUpScreen> {
       ),
     );
   }
-
 }
 
 class _LocationPickerTile extends StatelessWidget {

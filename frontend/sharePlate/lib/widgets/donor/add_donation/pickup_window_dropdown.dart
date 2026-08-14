@@ -5,12 +5,14 @@ import '../../../core/constants/app_colors.dart';
 class PickupWindowDropdown extends StatelessWidget {
   const PickupWindowDropdown({
     super.key,
-    required this.value,
+    this.initialValue,
+    this.value,
     required this.options,
     required this.onChanged,
   });
 
-  final String value;
+  final String? initialValue;
+  final String? value;
   final List<String> options;
   final ValueChanged<String> onChanged;
 
@@ -29,7 +31,7 @@ class PickupWindowDropdown extends StatelessWidget {
         ),
         const SizedBox(height: 8),
         DropdownButtonFormField<String>(
-          value: value,
+          initialValue: initialValue ?? value,
           decoration: InputDecoration(
             contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
             enabledBorder: OutlineInputBorder(
