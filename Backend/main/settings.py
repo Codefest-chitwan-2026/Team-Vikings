@@ -38,9 +38,12 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
 
-    # created apps 
+    # created apps
+    "rest_framework",
     'users',
     'profiles',
+    'authentication',
+    "rest_framework_simplejwt.token_blacklist",
 ]
 
 MIDDLEWARE = [
@@ -133,3 +136,20 @@ MAILERS = {
 
 ######## Custom User Model 
 AUTH_USER_MODEL = "users.User"
+
+
+# authenticated configurations 
+REST_FRAMEWORK = {
+    "DEFAULT_PERMISSION_CLASSES": [
+        "rest_framework.permissions.IsAuthenticated",
+    ],
+    "DEFAULT_AUTHENTICATION_CLASSES": [
+        "rest_framework_simplejwt.authentication.JWTAuthentication",
+    ],
+}
+
+
+# media files configurations 
+MEDIA_URL = "/media/"
+MEDIA_ROOT = BASE_DIR / "media"
+

@@ -14,7 +14,6 @@ class CustomerProfile(models.Model):
     address = models.TextField()
 
 
-
 # bussiness model profile 
 class BusinessProfile(models.Model):
     user = models.OneToOneField(
@@ -28,6 +27,11 @@ class BusinessProfile(models.Model):
     address = models.TextField()
     latitude = models.CharField(max_length=50)
     longitude = models.CharField(max_length=50)
+
+    registration_document = models.FileField(
+    upload_to="bussiness_documents/",
+    blank=True,
+    null=True)
 
 
 # NGO model profiles 
