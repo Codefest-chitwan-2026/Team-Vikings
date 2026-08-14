@@ -38,9 +38,11 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
 
-    # created apps 
+    # created apps
+    "rest_framework",
     'users',
     'profiles',
+    'authentication',
 ]
 
 MIDDLEWARE = [
@@ -133,3 +135,16 @@ MAILERS = {
 
 ######## Custom User Model 
 AUTH_USER_MODEL = "users.User"
+
+
+# authenticated configurations 
+REST_FRAMEWORK = {
+    "DEFAULT_PERMISSION_CLASSES": [
+        "rest_framework.permissions.IsAuthenticated",
+    ],
+}
+
+
+# media files configurations 
+MEDIA_URL = "/media/"
+MEDIA_ROOT = BASE_DIR / "media"
