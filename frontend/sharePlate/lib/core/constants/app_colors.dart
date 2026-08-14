@@ -32,4 +32,6 @@ class AppColors {
   static const Color cardLightBg = Color(0xFFE8F5E9); // Light green background for hero card
   static const Color chipBg = Color(0xFFE8F5E9);      // Light green tag background
 
+  static const Color infoBg = Color(0xFFF2F4F5); // Light grey banner background
+
 }

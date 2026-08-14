@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:shareplate/screens/shared/role_selection_screen.dart';
 import '../../core/constants/app_colors.dart';
 
 class OnboardingScreen extends StatefulWidget {
@@ -51,7 +52,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   }
 
   void _navigateToLogin() {
-    // Navigation placeholder for Login screen
+    Navigator.of(context).pushReplacement(
+      MaterialPageRoute(builder: (_) => const RoleSelectionScreen()),
+    );
   }
 
   @override
