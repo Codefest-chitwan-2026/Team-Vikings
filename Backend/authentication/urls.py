@@ -4,11 +4,14 @@ from .views import (
     CustomerProfileViewSet,
     BusinessProfileViewSet,
     NGOProfileViewSet,
-    UserRegisterViewSet
+    UserRegisterViewSet,
+    LoginViewSet,
+    LogoutViewSet,
 )
 
 
 router = DefaultRouter()
+
 
 router.register(
     "register/customer",
@@ -33,5 +36,18 @@ router.register(
     UserRegisterViewSet,
     basename="user"
 )
+
+router.register(
+    "login",
+    LoginViewSet,
+    basename="login"
+)
+
+router.register(
+    "logout",
+    LogoutViewSet,
+    basename="logout"
+)
+
 
 urlpatterns = router.urls

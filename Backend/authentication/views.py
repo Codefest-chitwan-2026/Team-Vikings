@@ -236,3 +236,59 @@ class UserRegisterViewSet(viewsets.ModelViewSet):
             return [AllowAny()]
 
         return [IsAdminUser()]
+
+
+# login 
+
+from rest_framework import status, viewsets
+from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework.response import Response
+from rest_framework_simplejwt.tokens import RefreshToken
+
+from .serializers import LoginSerializer, LogoutSerializer
+
+
+class LoginViewSet(viewsets.ViewSet):
+
+    permission_classes = [AllowAny]
+
+    def create(self, request):
+
+        serializer = LoginSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        user = serializer.validated_data["user"]
+
+        refresh = RefreshToken.for_user(user)
+
+        return Response(
+            {
+                "message": "Login successful",
+                "user": {
+                    "id": user.id,
+                    "phone_num": user.phone_num,
+                    "email": user.email,
+                    "role": user.role,
+                },
+                "access": str(refresh.access_token),
+                "refresh": str(refresh),
+            },
+            status=status.HTTP_200_OK
+        )
+
+
+class LogoutViewSet(viewsets.ViewSet):
+
+    permission_classes = [IsAuthenticated]
+
+    def create(self, request):
+
+        serializer = LogoutSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        return Response(
+            {
+                "message": "Logout successful"
+            },
+            status=status.HTTP_200_OK
+        )
