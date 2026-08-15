@@ -90,7 +90,7 @@ Lists role-appropriate listings:
 
 - Business: its own listings
 - NGO: all available donation listings
-- Customer: available flash sales
+- Customer: all available free donations and flash sales
 - Staff: all listings
 
 Optional filters: `food_type`, `listing_type`, `status`, `latitude`, `longitude`, `radius_km`.

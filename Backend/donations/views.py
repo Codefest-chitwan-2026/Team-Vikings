@@ -89,8 +89,8 @@ class DonationViewSet(viewsets.ModelViewSet):
             )
         else:
             base_qs = queryset.filter(
-                listing_type="FLASH_SALE",
                 status="AVAILABLE",
+                listing_type__in=["DONATION", "FLASH_SALE"],
             )
 
         food_type = self.request.query_params.get("food_type")
