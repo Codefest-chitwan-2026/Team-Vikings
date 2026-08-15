@@ -51,17 +51,18 @@ class _AddDonationScreenState extends State<AddDonationScreen> {
 
   late FoodCategory _selectedCategory;
   late ListingType _listingType;
-  String _pickupWindow = '30 minutes';
+  String _pickupWindow = '2 hours';
   PickedLocation? _selectedLocation;
   String? _selectedImagePath;
   String? _pickupAddressError;
   bool _isLoading = false;
 
   static const _pickupOptions = [
-    '15 minutes',
-    '30 minutes',
-    '45 minutes',
-    '1 hour',
+    '2 hours',
+    '3 hours',
+    '4 hours',
+    '6 hours',
+    '8 hours',
   ];
 
   @override
