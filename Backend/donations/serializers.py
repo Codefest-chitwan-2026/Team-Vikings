@@ -7,7 +7,13 @@ from .models import (
     Donation,
     DonationClaim,
     ConsumerReservation,
+    ConsumerOrder,
     PickupTicket,
+    SurplusSponsorItem,
+    CharitySponsorship,
+    ContributionItem,
+    Notification,
+    NotificationPreference,
     default_ngo_priority_duration,
 )
 
@@ -25,6 +31,9 @@ class PickupTicketSerializer(serializers.ModelSerializer):
             "id",
             "donation",
             "ticket_type",
+            "claim",
+            "reservation",
+            "order",
             "qr_code",
             "is_verified",
             "verified_at",
@@ -38,6 +47,7 @@ class DonationClaimSerializer(serializers.ModelSerializer):
 
     pickup_ticket = PickupTicketSerializer(read_only=True)
     ngo_name = serializers.SerializerMethodField()
+    ngo_details = serializers.SerializerMethodField()
 
     class Meta:
         model = DonationClaim
@@ -46,9 +56,17 @@ class DonationClaimSerializer(serializers.ModelSerializer):
             "donation",
             "ngo",
             "ngo_name",
+            "ngo_details",
             "pickup_method",
             "status",
+            "scheduled_pickup_start",
+            "scheduled_pickup_end",
+            "volunteer_name",
+            "volunteer_phone",
+            "donor_note",
+            "people_served_confirmed",
             "claimed_at",
+            "completed_at",
             "pickup_ticket",
         ]
         read_only_fields = [
@@ -64,6 +82,19 @@ class DonationClaimSerializer(serializers.ModelSerializer):
         profile = getattr(obj.ngo, "ngo_profile", None)
         if profile:
             return profile.organization_name
+        return getattr(obj.ngo, "phone_num", str(obj.ngo))
+
+    def get_ngo_details(self, obj):
+        profile = getattr(obj.ngo, "ngo_profile", None)
+        if profile:
+            return {
+                "organization_name": profile.organization_name,
+                "organization_type": profile.organization_type,
+                "address": profile.address,
+                "contact_name": profile.contact_name,
+                "phone": obj.ngo.phone_num,
+                "email": obj.ngo.email,
+            }
         return None
 
 
@@ -79,6 +110,7 @@ class ConsumerReservationSerializer(serializers.ModelSerializer):
             "donation",
             "consumer",
             "consumer_name",
+            "quantity",
             "status",
             "reserved_at",
             "pickup_ticket",
@@ -96,7 +128,45 @@ class ConsumerReservationSerializer(serializers.ModelSerializer):
         profile = getattr(obj.consumer, "customer_profile", None)
         if profile:
             return profile.full_name
-        return None
+        return getattr(obj.consumer, "phone_num", str(obj.consumer))
+
+
+class ConsumerOrderSerializer(serializers.ModelSerializer):
+
+    pickup_ticket = PickupTicketSerializer(read_only=True)
+    saved_amount = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)
+
+    class Meta:
+        model = ConsumerOrder
+        fields = [
+            "id",
+            "order_code",
+            "consumer",
+            "donation",
+            "title",
+            "store_name",
+            "store_phone",
+            "pickup_address",
+            "distance_km",
+            "original_price",
+            "discounted_price",
+            "saved_amount",
+            "category",
+            "pickup_window_minutes",
+            "instructions",
+            "status",
+            "order_time",
+            "created_at",
+            "pickup_ticket",
+        ]
+        read_only_fields = [
+            "id",
+            "order_code",
+            "consumer",
+            "saved_amount",
+            "created_at",
+            "pickup_ticket",
+        ]
 
 
 class DonationSerializer(serializers.ModelSerializer):
@@ -121,10 +191,9 @@ class DonationSerializer(serializers.ModelSerializer):
     )
     food_type = serializers.CharField(required=True)
     listing_type = serializers.CharField(required=False, default="DONATION")
-    quantity_unit = serializers.CharField(required=False, default="kg")
+    quantity_unit = serializers.CharField(required=False, default="Plates")
     best_before = serializers.DateTimeField(required=False)
 
-    # Optional helper fields for easy POST payload construction
     ngo_priority_duration_minutes = serializers.IntegerField(
         required=False,
         write_only=True,
@@ -136,7 +205,6 @@ class DonationSerializer(serializers.ModelSerializer):
         min_value=0.1,
     )
 
-    # Optional listing detail fields accepted during POST
     fresh_at = serializers.DateTimeField(required=False, allow_null=True, write_only=True)
     pickup_window_start = serializers.DateTimeField(required=False, allow_null=True, write_only=True)
     pickup_window_end = serializers.DateTimeField(required=False, allow_null=True, write_only=True)
@@ -158,6 +226,9 @@ class DonationSerializer(serializers.ModelSerializer):
         allow_null=True,
         write_only=True,
     )
+
+    food_photo = serializers.ImageField(required=False, allow_null=True)
+    photo = serializers.ImageField(required=False, allow_null=True, write_only=True)
 
     class Meta:
         model = Donation
@@ -184,6 +255,8 @@ class DonationSerializer(serializers.ModelSerializer):
             "price",
             "flash_sale_price",
             "status",
+            "food_photo",
+            "photo",
             "image",
             "claim",
             "listing_detail",
@@ -215,7 +288,7 @@ class DonationSerializer(serializers.ModelSerializer):
 
     def get_donor_business_name(self, obj):
         profile = getattr(obj.donor, "business_profile", None)
-        if profile:
+        if profile and profile.business_name:
             return profile.business_name
         return getattr(obj.donor, "phone_num", str(obj.donor))
 
@@ -280,28 +353,27 @@ class DonationSerializer(serializers.ModelSerializer):
         request = self.context.get("request")
         user = getattr(request, "user", None)
 
-        # Handle ngo_priority_duration_minutes
+        photo = attrs.pop("photo", None)
+        if photo and not attrs.get("food_photo"):
+            attrs["food_photo"] = photo
+
         duration_minutes = attrs.pop("ngo_priority_duration_minutes", None)
         if duration_minutes is not None:
             attrs["ngo_priority_duration"] = timedelta(minutes=int(duration_minutes))
 
-        # Handle duration if passed as int or float or string of digits
         raw_duration = attrs.get("ngo_priority_duration")
         if isinstance(raw_duration, (int, float)):
             attrs["ngo_priority_duration"] = timedelta(minutes=int(raw_duration))
         elif isinstance(raw_duration, str) and raw_duration.isdigit():
             attrs["ngo_priority_duration"] = timedelta(minutes=int(raw_duration))
 
-        # Handle best_before_hours
         hours = attrs.pop("best_before_hours", None)
         if not attrs.get("best_before") and hours is not None:
             attrs["best_before"] = timezone.now() + timedelta(hours=float(hours))
 
-        # Default best_before to 4 hours from now if creating and not provided
         if not self.instance and not attrs.get("best_before"):
             attrs["best_before"] = timezone.now() + timedelta(hours=4)
 
-        # Fallback pickup_address from business profile if not provided
         if not attrs.get("pickup_address"):
             if self.instance and self.instance.pickup_address:
                 attrs["pickup_address"] = self.instance.pickup_address
@@ -385,6 +457,166 @@ class DonationSerializer(serializers.ModelSerializer):
         return donation
 
 
+class SurplusSponsorItemSerializer(serializers.ModelSerializer):
+
+    total_sponsor_price = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)
+    total_original_price = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)
+    total_savings = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)
+    discount_percent = serializers.IntegerField(read_only=True)
+
+    class Meta:
+        model = SurplusSponsorItem
+        fields = [
+            "id",
+            "donor",
+            "donor_name",
+            "donor_type",
+            "donor_address",
+            "donor_phone",
+            "distance_km",
+            "food_title",
+            "category",
+            "total_meals",
+            "remaining_meals",
+            "quantity_unit",
+            "serves_approx",
+            "sponsor_price_per_meal",
+            "original_price_per_meal",
+            "total_sponsor_price",
+            "total_original_price",
+            "total_savings",
+            "discount_percent",
+            "minutes_left",
+            "cooked_ago",
+            "cooked_at",
+            "destination_ngo",
+            "destination_ngo_category",
+            "destination_address",
+            "description",
+            "items_included",
+            "packaging_info",
+            "hygiene_rating",
+            "image",
+            "is_active",
+            "created_at",
+        ]
+        read_only_fields = [
+            "id",
+            "total_sponsor_price",
+            "total_original_price",
+            "total_savings",
+            "discount_percent",
+            "created_at",
+        ]
+
+
+class CharitySponsorshipSerializer(serializers.ModelSerializer):
+
+    sponsor_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = CharitySponsorship
+        fields = [
+            "id",
+            "sponsorship_id",
+            "sponsor",
+            "sponsor_name",
+            "surplus_item",
+            "food_title",
+            "donor_name",
+            "meals_count",
+            "amount",
+            "original_value",
+            "savings",
+            "dedication",
+            "status",
+            "created_at",
+        ]
+        read_only_fields = [
+            "id",
+            "sponsorship_id",
+            "sponsor",
+            "created_at",
+        ]
+
+    def get_sponsor_name(self, obj):
+        profile = getattr(obj.sponsor, "customer_profile", None)
+        if profile and profile.full_name:
+            return profile.full_name
+        return getattr(obj.sponsor, "phone_num", str(obj.sponsor))
+
+
+class ContributionItemSerializer(serializers.ModelSerializer):
+
+    class Meta:
+        model = ContributionItem
+        fields = [
+            "id",
+            "receipt_number",
+            "donation",
+            "donor",
+            "recipient_ngo",
+            "title",
+            "recipient_name",
+            "recipient_category",
+            "recipient_address",
+            "recipient_phone",
+            "category",
+            "plates",
+            "serves_approx",
+            "status",
+            "pickup_address",
+            "pickup_time",
+            "delivered_time",
+            "driver_volunteer",
+            "co2_saved_kg",
+            "beneficiaries_count",
+            "description",
+            "image",
+            "created_at",
+        ]
+        read_only_fields = [
+            "id",
+            "receipt_number",
+            "created_at",
+        ]
+
+
+class NotificationSerializer(serializers.ModelSerializer):
+
+    class Meta:
+        model = Notification
+        fields = [
+            "id",
+            "user",
+            "title",
+            "message",
+            "notification_type",
+            "is_read",
+            "target_id",
+            "created_at",
+        ]
+        read_only_fields = ["id", "user", "created_at"]
+
+
+class NotificationPreferenceSerializer(serializers.ModelSerializer):
+
+    class Meta:
+        model = NotificationPreference
+        fields = [
+            "id",
+            "user",
+            "email_notifications",
+            "push_notifications",
+            "sms_alerts",
+            "expiry_reminders",
+            "claim_alerts",
+            "marketing_updates",
+            "updated_at",
+        ]
+        read_only_fields = ["id", "user", "updated_at"]
+
+
 class DonationClaimCreateSerializer(serializers.Serializer):
 
     donation = serializers.PrimaryKeyRelatedField(
@@ -400,6 +632,12 @@ class DonationClaimCreateSerializer(serializers.Serializer):
         choices=DonationClaim.PICKUP_METHOD_CHOICES,
         default="SELF",
     )
+    scheduled_pickup_start = serializers.DateTimeField(required=False, allow_null=True)
+    scheduled_pickup_end = serializers.DateTimeField(required=False, allow_null=True)
+    volunteer_name = serializers.CharField(required=False, allow_blank=True)
+    volunteer_phone = serializers.CharField(required=False, allow_blank=True)
+    donor_note = serializers.CharField(required=False, allow_blank=True)
+    people_served_confirmed = serializers.IntegerField(required=False, min_value=1)
 
     def validate(self, attrs):
         donation = attrs.get("donation")
@@ -425,6 +663,7 @@ class ConsumerReservationCreateSerializer(serializers.Serializer):
         required=False,
         allow_null=True,
     )
+    quantity = serializers.IntegerField(required=False, default=1, min_value=1)
 
     def validate(self, attrs):
         donation = attrs.get("donation")
@@ -448,9 +687,7 @@ class VerifyPickupSerializer(serializers.Serializer):
         qr_code = attrs.get("qr_code")
         manual_code = attrs.get("manual_code")
         if not qr_code and not manual_code:
-            raise serializers.ValidationError(
-                "Provide qr_code or manual_code."
-            )
+            raise serializers.ValidationError("Provide qr_code or manual_code.")
         return attrs
 
 
@@ -461,3 +698,15 @@ class ConvertToFlashSaleSerializer(serializers.Serializer):
         decimal_places=2,
         required=False,
     )
+
+
+class CharitySponsorCreateSerializer(serializers.Serializer):
+
+    surplus_item_id = serializers.IntegerField(required=False, allow_null=True)
+    food_title = serializers.CharField(required=False, allow_blank=True)
+    donor_name = serializers.CharField(required=False, allow_blank=True)
+    meals_count = serializers.IntegerField(default=1, min_value=1)
+    amount = serializers.DecimalField(max_digits=10, decimal_places=2, required=False)
+    original_value = serializers.DecimalField(max_digits=10, decimal_places=2, required=False)
+    savings = serializers.DecimalField(max_digits=10, decimal_places=2, required=False)
+    dedication = serializers.CharField(required=False, allow_blank=True)

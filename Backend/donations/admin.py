@@ -5,7 +5,13 @@ from .models import (
     Donation,
     DonationClaim,
     ConsumerReservation,
+    ConsumerOrder,
     PickupTicket,
+    SurplusSponsorItem,
+    CharitySponsorship,
+    ContributionItem,
+    Notification,
+    NotificationPreference,
 )
 
 
@@ -20,7 +26,7 @@ class DonationClaimInline(admin.StackedInline):
 class ConsumerReservationInline(admin.TabularInline):
     model = ConsumerReservation
     extra = 0
-    readonly_fields = ["consumer", "status", "reserved_at"]
+    readonly_fields = ["consumer", "quantity", "status", "reserved_at"]
 
 
 class PickupTicketInline(admin.TabularInline):
@@ -73,72 +79,10 @@ class DonationAdmin(admin.ModelAdmin):
     readonly_fields = ["created_at", "updated_at", "ngo_priority_expires_at"]
     inlines = [DonationClaimInline, ConsumerReservationInline, PickupTicketInline]
 
-    fieldsets = (
-        (
-            "Listing",
-            {
-                "fields": (
-                    "donor",
-                    "listing_type",
-                    "title",
-                    "description",
-                    "status",
-                    "image",
-                ),
-            },
-        ),
-        (
-            "Food details",
-            {
-                "fields": (
-                    "food_type",
-                    "quantity",
-                    "quantity_unit",
-                    "people_served",
-                    "best_before",
-                ),
-            },
-        ),
-        (
-            "NGO priority window",
-            {
-                "fields": (
-                    "ngo_priority_duration",
-                    "ngo_priority_expires_at",
-                ),
-            },
-        ),
-        (
-            "Pickup location",
-            {
-                "fields": (
-                    "pickup_address",
-                    "latitude",
-                    "longitude",
-                ),
-            },
-        ),
-        (
-            "Pricing",
-            {
-                "fields": (
-                    "price",
-                    "flash_sale_price",
-                ),
-            },
-        ),
-        (
-            "Timestamps",
-            {
-                "fields": ("created_at", "updated_at"),
-            },
-        ),
-    )
-
     @admin.display(description="Donor", ordering="donor__business_profile__business_name")
     def donor_name(self, obj):
         profile = getattr(obj.donor, "business_profile", None)
-        if profile:
+        if profile and profile.business_name:
             return profile.business_name
         return obj.donor.phone_num
 
@@ -191,7 +135,7 @@ class DonationClaimAdmin(admin.ModelAdmin):
     @admin.display(description="NGO", ordering="ngo__ngo_profile__organization_name")
     def ngo_name(self, obj):
         profile = getattr(obj.ngo, "ngo_profile", None)
-        if profile:
+        if profile and profile.organization_name:
             return profile.organization_name
         return obj.ngo.phone_num
 
@@ -200,7 +144,9 @@ class DonationClaimAdmin(admin.ModelAdmin):
         colors = {
             "PENDING": "#fd7e14",
             "CONFIRMED": "#0d6efd",
+            "IN_PROGRESS": "#0dcaf0",
             "PICKED_UP": "#198754",
+            "COMPLETED": "#20c997",
             "CANCELLED": "#dc3545",
         }
         color = colors.get(obj.status, "#333333")
@@ -220,6 +166,7 @@ class ConsumerReservationAdmin(admin.ModelAdmin):
     list_display = [
         "donation",
         "consumer_name",
+        "quantity",
         "status_badge",
         "reserved_at",
         "has_pickup_ticket",
@@ -240,7 +187,7 @@ class ConsumerReservationAdmin(admin.ModelAdmin):
     @admin.display(description="Consumer", ordering="consumer__customer_profile__full_name")
     def consumer_name(self, obj):
         profile = getattr(obj.consumer, "customer_profile", None)
-        if profile:
+        if profile and profile.full_name:
             return profile.full_name
         return obj.consumer.phone_num
 
@@ -250,6 +197,7 @@ class ConsumerReservationAdmin(admin.ModelAdmin):
             "PENDING": "#fd7e14",
             "CONFIRMED": "#0d6efd",
             "PICKED_UP": "#198754",
+            "COMPLETED": "#20c997",
             "CANCELLED": "#dc3545",
             "EXPIRED": "#6c757d",
         }
@@ -263,6 +211,23 @@ class ConsumerReservationAdmin(admin.ModelAdmin):
     @admin.display(boolean=True, description="QR ticket")
     def has_pickup_ticket(self, obj):
         return PickupTicket.objects.filter(reservation=obj).exists()
+
+
+@admin.register(ConsumerOrder)
+class ConsumerOrderAdmin(admin.ModelAdmin):
+    list_display = [
+        "order_code",
+        "title",
+        "store_name",
+        "consumer",
+        "discounted_price",
+        "status",
+        "order_time",
+    ]
+    list_filter = ["status", "category", "order_time"]
+    search_fields = ["order_code", "title", "store_name", "consumer__phone_num"]
+    date_hierarchy = "order_time"
+    readonly_fields = ["created_at"]
 
 
 @admin.register(PickupTicket)
@@ -300,3 +265,63 @@ class PickupTicketAdmin(admin.ModelAdmin):
         return format_html(
             '<span style="color: #fd7e14; font-weight: 600;">Pending</span>'
         )
+
+
+@admin.register(SurplusSponsorItem)
+class SurplusSponsorItemAdmin(admin.ModelAdmin):
+    list_display = [
+        "food_title",
+        "donor_name",
+        "destination_ngo",
+        "remaining_meals",
+        "sponsor_price_per_meal",
+        "is_active",
+        "created_at",
+    ]
+    list_filter = ["category", "is_active", "created_at"]
+    search_fields = ["food_title", "donor_name", "destination_ngo"]
+
+
+@admin.register(CharitySponsorship)
+class CharitySponsorshipAdmin(admin.ModelAdmin):
+    list_display = [
+        "sponsorship_id",
+        "food_title",
+        "donor_name",
+        "sponsor",
+        "meals_count",
+        "amount",
+        "status",
+        "created_at",
+    ]
+    list_filter = ["status", "created_at"]
+    search_fields = ["sponsorship_id", "food_title", "donor_name", "sponsor__phone_num"]
+
+
+@admin.register(ContributionItem)
+class ContributionItemAdmin(admin.ModelAdmin):
+    list_display = [
+        "receipt_number",
+        "title",
+        "donor",
+        "recipient_name",
+        "category",
+        "plates",
+        "co2_saved_kg",
+        "status",
+        "created_at",
+    ]
+    list_filter = ["category", "status", "created_at"]
+    search_fields = ["receipt_number", "title", "recipient_name", "donor__phone_num"]
+
+
+@admin.register(Notification)
+class NotificationAdmin(admin.ModelAdmin):
+    list_display = ["title", "user", "notification_type", "is_read", "created_at"]
+    list_filter = ["notification_type", "is_read", "created_at"]
+    search_fields = ["title", "message", "user__phone_num"]
+
+
+@admin.register(NotificationPreference)
+class NotificationPreferenceAdmin(admin.ModelAdmin):
+    list_display = ["user", "email_notifications", "push_notifications", "sms_alerts", "updated_at"]

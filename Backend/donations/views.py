@@ -4,7 +4,7 @@ from math import radians, cos, sin, asin, sqrt
 from django.utils import timezone
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from rest_framework.response import Response
 
@@ -12,16 +12,30 @@ from .models import (
     Donation,
     DonationClaim,
     ConsumerReservation,
+    ConsumerOrder,
     PickupTicket,
+    SurplusSponsorItem,
+    CharitySponsorship,
+    ContributionItem,
+    Notification,
+    NotificationPreference,
 )
 from .serializers import (
     DonationSerializer,
     DonationClaimSerializer,
     ConsumerReservationSerializer,
+    ConsumerOrderSerializer,
+    PickupTicketSerializer,
+    SurplusSponsorItemSerializer,
+    CharitySponsorshipSerializer,
+    ContributionItemSerializer,
+    NotificationSerializer,
+    NotificationPreferenceSerializer,
     DonationClaimCreateSerializer,
     ConsumerReservationCreateSerializer,
     VerifyPickupSerializer,
     ConvertToFlashSaleSerializer,
+    CharitySponsorCreateSerializer,
 )
 
 
@@ -62,11 +76,13 @@ class DonationViewSet(viewsets.ModelViewSet):
             "claim__ngo",
         )
 
+        role = getattr(user, "role", "").upper() if getattr(user, "role", None) else ""
+
         if user.is_staff:
             base_qs = queryset
-        elif user.role and user.role.upper() == "BUSINESS":
+        elif role == "BUSINESS":
             base_qs = queryset.filter(donor=user)
-        elif user.role and user.role.upper() == "NGO":
+        elif role == "NGO":
             base_qs = queryset.filter(
                 listing_type="DONATION",
                 status="AVAILABLE",
@@ -254,8 +270,14 @@ class DonationViewSet(viewsets.ModelViewSet):
         claim = DonationClaim.objects.create(
             donation=donation,
             ngo=request.user,
-            pickup_method=serializer.validated_data["pickup_method"],
+            pickup_method=serializer.validated_data.get("pickup_method", "SELF"),
             status="CONFIRMED",
+            scheduled_pickup_start=serializer.validated_data.get("scheduled_pickup_start"),
+            scheduled_pickup_end=serializer.validated_data.get("scheduled_pickup_end"),
+            volunteer_name=serializer.validated_data.get("volunteer_name", ""),
+            volunteer_phone=serializer.validated_data.get("volunteer_phone", ""),
+            donor_note=serializer.validated_data.get("donor_note", ""),
+            people_served_confirmed=serializer.validated_data.get("people_served_confirmed"),
         )
 
         donation.status = "CLAIMED"
@@ -274,6 +296,26 @@ class DonationViewSet(viewsets.ModelViewSet):
             "qr_code": pickup_ticket.qr_code,
             "id": pickup_ticket.id,
         }
+
+        # Create contribution item automatically
+        ContributionItem.objects.create(
+            donation=donation,
+            donor=donation.donor,
+            recipient_ngo=request.user,
+            title=donation.title,
+            recipient_name=getattr(getattr(request.user, "ngo_profile", None), "organization_name", request.user.phone_num),
+            recipient_category=getattr(getattr(request.user, "ngo_profile", None), "organization_type", "NGO"),
+            recipient_address=donation.pickup_address,
+            recipient_phone=request.user.phone_num,
+            category=donation.food_type,
+            plates=int(donation.quantity),
+            serves_approx=f"{donation.people_served} people",
+            status="NGO_EN_ROUTE",
+            pickup_address=donation.pickup_address,
+            co2_saved_kg=Decimal(str(round(float(donation.quantity) * 0.48, 2))),
+            beneficiaries_count=donation.people_served,
+            description=donation.description,
+        )
 
         return Response(
             {
@@ -324,10 +366,26 @@ class DonationViewSet(viewsets.ModelViewSet):
         donation.status = "RESERVED"
         donation.save(update_fields=["status", "updated_at"])
 
+        # Also create a ConsumerOrder record so it displays in My Orders
+        order = ConsumerOrder.objects.create(
+            consumer=request.user,
+            donation=donation,
+            title=donation.title,
+            store_name=getattr(getattr(donation.donor, "business_profile", None), "business_name", donation.donor.phone_num),
+            store_phone=donation.donor.phone_num,
+            pickup_address=donation.pickup_address,
+            original_price=donation.price or Decimal("300.00"),
+            discounted_price=donation.flash_sale_price or Decimal("100.00"),
+            category=donation.food_type,
+            pickup_window_minutes=45,
+            status="READY_FOR_PICKUP",
+        )
+
         pickup_ticket = PickupTicket.objects.create(
             donation=donation,
             ticket_type="CONSUMER_RESERVATION",
             reservation=reservation,
+            order=order,
         )
 
         _create_qr_metadata_if_possible(pickup_ticket, donation)
@@ -336,12 +394,14 @@ class DonationViewSet(viewsets.ModelViewSet):
         reservation_data["pickup_ticket"] = {
             "qr_code": pickup_ticket.qr_code,
             "id": pickup_ticket.id,
+            "order_code": order.order_code,
         }
 
         return Response(
             {
                 "message": "Flash sale reserved successfully",
                 "reservation": reservation_data,
+                "order_code": order.order_code,
             },
             status=status.HTTP_201_CREATED,
         )
@@ -398,6 +458,7 @@ class DonationViewSet(viewsets.ModelViewSet):
             claim.save(update_fields=["status"])
 
         donation.reservations.update(status="CANCELLED")
+        donation.consumer_orders.update(status="CANCELLED")
 
         return Response(
             {
@@ -428,6 +489,7 @@ class DonationViewSet(viewsets.ModelViewSet):
                 "donation",
                 "claim",
                 "reservation",
+                "order",
             ).filter(qr_code=qr_code).first()
 
         if not ticket and manual_code:
@@ -474,12 +536,20 @@ class DonationViewSet(viewsets.ModelViewSet):
         donation.save(update_fields=["status", "updated_at"])
 
         if ticket.claim:
-            ticket.claim.status = "PICKED_UP"
-            ticket.claim.save(update_fields=["status"])
+            ticket.claim.status = "COMPLETED"
+            ticket.claim.completed_at = timezone.now()
+            ticket.claim.save(update_fields=["status", "completed_at"])
 
         if ticket.reservation:
-            ticket.reservation.status = "PICKED_UP"
+            ticket.reservation.status = "COMPLETED"
             ticket.reservation.save(update_fields=["status"])
+
+        if ticket.order:
+            ticket.order.status = "COMPLETED"
+            ticket.order.save(update_fields=["status"])
+
+        # Update contribution status
+        ContributionItem.objects.filter(donation=donation).update(status="COMPLETED")
 
         return Response(
             {
@@ -503,6 +573,7 @@ class DonationClaimViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         user = self.request.user
+        role = getattr(user, "role", "").upper() if getattr(user, "role", None) else ""
 
         if user.is_staff:
             return DonationClaim.objects.select_related(
@@ -511,14 +582,14 @@ class DonationClaimViewSet(viewsets.ModelViewSet):
                 "pickup_ticket",
             )
 
-        if user.role and user.role.upper() == "NGO":
+        if role == "NGO":
             return DonationClaim.objects.filter(ngo=user).select_related(
                 "donation",
                 "ngo",
                 "pickup_ticket",
             )
 
-        if user.role and user.role.upper() == "BUSINESS":
+        if role == "BUSINESS":
             return DonationClaim.objects.filter(
                 donation__donor=user
             ).select_related(
@@ -529,83 +600,6 @@ class DonationClaimViewSet(viewsets.ModelViewSet):
 
         return DonationClaim.objects.none()
 
-    def create(self, request, *args, **kwargs):
-        is_ngo = request.user.role and request.user.role.upper() == "NGO"
-        if not (request.user.is_staff or is_ngo):
-            return Response(
-                {"error": "Only NGO users can claim donations"},
-                status=status.HTTP_403_FORBIDDEN,
-            )
-
-        serializer = DonationClaimCreateSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-
-        donation = serializer.validated_data.get("donation")
-        if not donation:
-            return Response(
-                {"error": "donation or donation_id is required"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        donation.check_priority_expired()
-
-        if donation.listing_type != "DONATION":
-            return Response(
-                {"error": "Only donation listings can be claimed by NGOs"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        if not donation.is_ngo_priority_active():
-            return Response(
-                {"error": "NGO priority window has expired"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        if donation.status != "AVAILABLE":
-            return Response(
-                {"error": "This donation is no longer available"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        if DonationClaim.objects.filter(donation=donation).exists():
-            return Response(
-                {"error": "This donation has already been claimed"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        pickup_method = serializer.validated_data.get("pickup_method", "SELF")
-        claim = DonationClaim.objects.create(
-            donation=donation,
-            ngo=request.user,
-            pickup_method=pickup_method,
-            status="CONFIRMED",
-        )
-
-        donation.status = "CLAIMED"
-        donation.save(update_fields=["status", "updated_at"])
-
-        pickup_ticket = PickupTicket.objects.create(
-            donation=donation,
-            ticket_type="NGO_CLAIM",
-            claim=claim,
-        )
-
-        _create_qr_metadata_if_possible(pickup_ticket, donation)
-
-        claim_data = DonationClaimSerializer(claim).data
-        claim_data["pickup_ticket"] = {
-            "qr_code": pickup_ticket.qr_code,
-            "id": pickup_ticket.id,
-        }
-
-        return Response(
-            {
-                "message": "Donation claimed successfully",
-                "claim": claim_data,
-            },
-            status=status.HTTP_201_CREATED,
-        )
-
 
 class ConsumerReservationViewSet(viewsets.ModelViewSet):
 
@@ -615,6 +609,7 @@ class ConsumerReservationViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         user = self.request.user
+        role = getattr(user, "role", "").upper() if getattr(user, "role", None) else ""
 
         if user.is_staff:
             return ConsumerReservation.objects.select_related(
@@ -623,7 +618,7 @@ class ConsumerReservationViewSet(viewsets.ModelViewSet):
                 "pickup_ticket",
             )
 
-        if user.role and user.role.upper() == "CUSTOMER":
+        if role == "CUSTOMER":
             return ConsumerReservation.objects.filter(
                 consumer=user
             ).select_related(
@@ -632,7 +627,7 @@ class ConsumerReservationViewSet(viewsets.ModelViewSet):
                 "pickup_ticket",
             )
 
-        if user.role and user.role.upper() == "BUSINESS":
+        if role == "BUSINESS":
             return ConsumerReservation.objects.filter(
                 donation__donor=user
             ).select_related(
@@ -643,73 +638,156 @@ class ConsumerReservationViewSet(viewsets.ModelViewSet):
 
         return ConsumerReservation.objects.none()
 
-    def create(self, request, *args, **kwargs):
-        is_customer = request.user.role and request.user.role.upper() == "CUSTOMER"
-        if not (request.user.is_staff or is_customer):
-            return Response(
-                {"error": "Only consumers can reserve flash sales"},
-                status=status.HTTP_403_FORBIDDEN,
-            )
 
-        serializer = ConsumerReservationCreateSerializer(data=request.data)
+class ConsumerOrderViewSet(viewsets.ModelViewSet):
+
+    queryset = ConsumerOrder.objects.all()
+    serializer_class = ConsumerOrderSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        user = self.request.user
+        role = getattr(user, "role", "").upper() if getattr(user, "role", None) else ""
+
+        if user.is_staff:
+            return ConsumerOrder.objects.all()
+        if role == "CUSTOMER":
+            return ConsumerOrder.objects.filter(consumer=user)
+        if role == "BUSINESS":
+            return ConsumerOrder.objects.filter(donation__donor=user)
+        return ConsumerOrder.objects.none()
+
+    def perform_create(self, serializer):
+        serializer.save(consumer=self.request.user)
+
+
+class SurplusSponsorItemViewSet(viewsets.ModelViewSet):
+
+    queryset = SurplusSponsorItem.objects.filter(is_active=True)
+    serializer_class = SurplusSponsorItemSerializer
+    permission_classes = [AllowAny]
+
+    def get_permissions(self):
+        if self.action in ["list", "retrieve"]:
+            return [AllowAny()]
+        return [IsAuthenticated()]
+
+    def perform_create(self, serializer):
+        serializer.save(donor=self.request.user)
+
+
+class CharitySponsorshipViewSet(viewsets.ModelViewSet):
+
+    queryset = CharitySponsorship.objects.all()
+    serializer_class = CharitySponsorshipSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        user = self.request.user
+        role = getattr(user, "role", "").upper() if getattr(user, "role", None) else ""
+
+        if user.is_staff:
+            return CharitySponsorship.objects.all()
+        if role == "CUSTOMER":
+            return CharitySponsorship.objects.filter(sponsor=user)
+        return CharitySponsorship.objects.all()
+
+    def create(self, request, *args, **kwargs):
+        serializer = CharitySponsorCreateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
-        donation = serializer.validated_data.get("donation")
-        if not donation:
-            return Response(
-                {"error": "donation or donation_id is required"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+        surplus_item = None
+        item_id = serializer.validated_data.get("surplus_item_id")
+        if item_id:
+            surplus_item = SurplusSponsorItem.objects.filter(pk=item_id).first()
 
-        if donation.listing_type != "FLASH_SALE":
-            return Response(
-                {"error": "Only flash sale listings can be reserved"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+        meals_count = serializer.validated_data.get("meals_count", 1)
+        amount = serializer.validated_data.get("amount") or (surplus_item.sponsor_price_per_meal * meals_count if surplus_item else Decimal("80.00") * meals_count)
+        orig_val = serializer.validated_data.get("original_value") or (surplus_item.original_price_per_meal * meals_count if surplus_item else Decimal("350.00") * meals_count)
+        savings = orig_val - amount
+        food_title = serializer.validated_data.get("food_title") or (surplus_item.food_title if surplus_item else "Surplus Dinner Buffet")
+        donor_name = serializer.validated_data.get("donor_name") or (surplus_item.donor_name if surplus_item else "Restaurant")
 
-        if donation.status != "AVAILABLE":
-            return Response(
-                {"error": "This listing is no longer available"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+        if surplus_item and surplus_item.remaining_meals >= meals_count:
+            surplus_item.remaining_meals -= meals_count
+            if surplus_item.remaining_meals == 0:
+                surplus_item.is_active = False
+            surplus_item.save(update_fields=["remaining_meals", "is_active"])
 
-        if ConsumerReservation.objects.filter(
-            donation=donation,
-            consumer=request.user,
-        ).exists():
-            return Response(
-                {"error": "You have already reserved this listing"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        reservation = ConsumerReservation.objects.create(
-            donation=donation,
-            consumer=request.user,
+        sponsorship = CharitySponsorship.objects.create(
+            sponsor=request.user,
+            surplus_item=surplus_item,
+            food_title=food_title,
+            donor_name=donor_name,
+            meals_count=meals_count,
+            amount=amount,
+            original_value=orig_val,
+            savings=savings,
+            dedication=serializer.validated_data.get("dedication", ""),
             status="CONFIRMED",
         )
 
-        donation.status = "RESERVED"
-        donation.save(update_fields=["status", "updated_at"])
-
-        pickup_ticket = PickupTicket.objects.create(
-            donation=donation,
-            ticket_type="CONSUMER_RESERVATION",
-            reservation=reservation,
-        )
-
-        _create_qr_metadata_if_possible(pickup_ticket, donation)
-
-        reservation_data = ConsumerReservationSerializer(reservation).data
-        reservation_data["pickup_ticket"] = {
-            "qr_code": pickup_ticket.qr_code,
-            "id": pickup_ticket.id,
-        }
-
         return Response(
             {
-                "message": "Flash sale reserved successfully",
-                "reservation": reservation_data,
+                "message": "Sponsorship created successfully",
+                "sponsorship": CharitySponsorshipSerializer(sponsorship).data,
             },
             status=status.HTTP_201_CREATED,
         )
 
+
+class ContributionItemViewSet(viewsets.ModelViewSet):
+
+    queryset = ContributionItem.objects.all()
+    serializer_class = ContributionItemSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        user = self.request.user
+        role = getattr(user, "role", "").upper() if getattr(user, "role", None) else ""
+
+        if user.is_staff:
+            return ContributionItem.objects.all()
+        if role == "BUSINESS":
+            return ContributionItem.objects.filter(donor=user)
+        if role == "NGO":
+            return ContributionItem.objects.filter(recipient_ngo=user)
+        return ContributionItem.objects.all()
+
+
+class NotificationViewSet(viewsets.ModelViewSet):
+
+    queryset = Notification.objects.all()
+    serializer_class = NotificationSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return Notification.objects.filter(user=self.request.user)
+
+    @action(detail=True, methods=["patch"])
+    def read(self, request, pk=None):
+        notif = self.get_object()
+        notif.is_read = True
+        notif.save(update_fields=["is_read"])
+        return Response({"message": "Marked as read"})
+
+    @action(detail=False, methods=["post"], url_path="read-all")
+    def read_all(self, request):
+        Notification.objects.filter(user=request.user, is_read=False).update(is_read=True)
+        return Response({"message": "All notifications marked as read"})
+
+
+class NotificationPreferenceViewSet(viewsets.ViewSet):
+
+    permission_classes = [IsAuthenticated]
+
+    def list(self, request):
+        pref, _ = NotificationPreference.objects.get_or_create(user=request.user)
+        return Response(NotificationPreferenceSerializer(pref).data)
+
+    def create(self, request):
+        pref, _ = NotificationPreference.objects.get_or_create(user=request.user)
+        serializer = NotificationPreferenceSerializer(pref, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data)

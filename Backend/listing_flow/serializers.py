@@ -70,6 +70,7 @@ class DonationDetailSerializer(serializers.ModelSerializer):
             "priority_seconds_remaining",
             "donor_business_name",
             "distance_km",
+            "food_photo",
             "image",
             "listing_detail",
             "created_at",

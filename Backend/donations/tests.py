@@ -357,5 +357,38 @@ class DonationEndpointTests(TestCase):
         )
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
 
+    def test_upload_donation_food_photo(self):
+        from io import BytesIO
+        from PIL import Image
+        from django.core.files.uploadedfile import SimpleUploadedFile
+
+        self._login(self.business_user)
+
+        img_byte_arr = BytesIO()
+        img = Image.new("RGB", (10, 10), color="green")
+        img.save(img_byte_arr, format="JPEG")
+        photo = SimpleUploadedFile(
+            "curry.jpg",
+            img_byte_arr.getvalue(),
+            content_type="image/jpeg",
+        )
+
+        response = self.client.post(
+            "/api/donations/",
+            {
+                "title": "Paneer Butter Masala",
+                "description": "Delicious curry with rice",
+                "food_type": "VEG",
+                "quantity": "4",
+                "people_served": 8,
+                "pickup_address": "Kathmandu",
+                "food_photo": photo,
+            },
+            format="multipart",
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertIsNotNone(response.data["food_photo"])
+
+
 
 
