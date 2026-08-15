@@ -154,13 +154,15 @@ class DonationViewSet(viewsets.ModelViewSet):
 
         if latitude is None and business_profile and business_profile.latitude:
             try:
-                latitude = Decimal(str(business_profile.latitude).strip())
+                lat_f = float(str(business_profile.latitude).strip())
+                latitude = Decimal(str(round(lat_f, 8)))
             except Exception:
                 latitude = None
 
         if longitude is None and business_profile and business_profile.longitude:
             try:
-                longitude = Decimal(str(business_profile.longitude).strip())
+                lng_f = float(str(business_profile.longitude).strip())
+                longitude = Decimal(str(round(lng_f, 8)))
             except Exception:
                 longitude = None
 

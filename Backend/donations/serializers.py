@@ -177,18 +177,8 @@ class DonationSerializer(serializers.ModelSerializer):
     listing_detail = serializers.SerializerMethodField(read_only=True)
 
     pickup_address = serializers.CharField(required=False, allow_blank=True)
-    latitude = serializers.DecimalField(
-        max_digits=9,
-        decimal_places=6,
-        required=False,
-        allow_null=True,
-    )
-    longitude = serializers.DecimalField(
-        max_digits=9,
-        decimal_places=6,
-        required=False,
-        allow_null=True,
-    )
+    latitude = serializers.CharField(required=False, allow_null=True, allow_blank=True)
+    longitude = serializers.CharField(required=False, allow_null=True, allow_blank=True)
     food_type = serializers.CharField(required=True)
     listing_type = serializers.CharField(required=False, default="DONATION")
     quantity_unit = serializers.CharField(required=False, default="Plates")
@@ -314,6 +304,28 @@ class DonationSerializer(serializers.ModelSerializer):
         except Exception:
             pass
         return None
+
+    def validate_latitude(self, value):
+        if value is None or str(value).strip() == "":
+            return None
+        try:
+            val = float(str(value).strip())
+            if val < -90.0 or val > 90.0:
+                raise serializers.ValidationError("Latitude must be between -90 and 90.")
+            return Decimal(str(round(val, 8)))
+        except (ValueError, TypeError):
+            raise serializers.ValidationError("Invalid latitude format.")
+
+    def validate_longitude(self, value):
+        if value is None or str(value).strip() == "":
+            return None
+        try:
+            val = float(str(value).strip())
+            if val < -180.0 or val > 180.0:
+                raise serializers.ValidationError("Longitude must be between -180 and 180.")
+            return Decimal(str(round(val, 8)))
+        except (ValueError, TypeError):
+            raise serializers.ValidationError("Invalid longitude format.")
 
     def validate_food_type(self, value):
         if not value:

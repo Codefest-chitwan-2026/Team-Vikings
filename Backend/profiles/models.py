@@ -96,13 +96,13 @@ class NGOProfile(models.Model):
     contact_name = models.CharField(max_length=150, blank=True, default="")
     address = models.TextField(blank=True, default="")
     latitude = models.DecimalField(
-        max_digits=9,
-        decimal_places=6,
+        max_digits=12,
+        decimal_places=8,
         default=27.7172,
     )
     longitude = models.DecimalField(
-        max_digits=9,
-        decimal_places=6,
+        max_digits=12,
+        decimal_places=8,
         default=85.3240,
     )
     registration_document = models.FileField(

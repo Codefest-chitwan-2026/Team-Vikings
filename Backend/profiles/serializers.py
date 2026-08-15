@@ -38,6 +38,9 @@ class BusinessProfileSerializer(serializers.ModelSerializer):
 
 
 class NGOProfileSerializer(serializers.ModelSerializer):
+    latitude = serializers.CharField(required=False, allow_null=True, allow_blank=True)
+    longitude = serializers.CharField(required=False, allow_null=True, allow_blank=True)
+
     class Meta:
         model = NGOProfile
         fields = [
@@ -61,6 +64,24 @@ class NGOProfileSerializer(serializers.ModelSerializer):
             "updated_at",
         ]
         read_only_fields = ["id", "user", "created_at", "updated_at"]
+
+    def validate_latitude(self, value):
+        if value is None or str(value).strip() == "":
+            return Decimal("27.717200")
+        try:
+            val = float(str(value).strip())
+            return Decimal(str(round(val, 8)))
+        except (ValueError, TypeError):
+            raise serializers.ValidationError("Invalid latitude format.")
+
+    def validate_longitude(self, value):
+        if value is None or str(value).strip() == "":
+            return Decimal("85.324000")
+        try:
+            val = float(str(value).strip())
+            return Decimal(str(round(val, 8)))
+        except (ValueError, TypeError):
+            raise serializers.ValidationError("Invalid longitude format.")
 
 
 class VerificationDocumentSerializer(serializers.ModelSerializer):

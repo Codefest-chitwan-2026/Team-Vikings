@@ -102,15 +102,15 @@ class Donation(models.Model):
     pickup_address = models.TextField()
 
     latitude = models.DecimalField(
-        max_digits=9,
-        decimal_places=6,
+        max_digits=12,
+        decimal_places=8,
         blank=True,
         null=True,
     )
 
     longitude = models.DecimalField(
-        max_digits=9,
-        decimal_places=6,
+        max_digits=12,
+        decimal_places=8,
         blank=True,
         null=True,
     )
