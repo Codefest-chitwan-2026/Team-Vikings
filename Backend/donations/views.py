@@ -600,6 +600,89 @@ class DonationClaimViewSet(viewsets.ModelViewSet):
 
         return DonationClaim.objects.none()
 
+    def create(self, request, *args, **kwargs):
+        is_ngo = request.user.role and request.user.role.upper() == "NGO"
+        if not (request.user.is_staff or is_ngo):
+            return Response(
+                {"error": "Only NGO users can claim donations"},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        serializer = DonationClaimCreateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        donation = serializer.validated_data.get("donation")
+        if not donation:
+            return Response(
+                {"error": "donation or donation_id is required"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        donation.check_priority_expired()
+
+        if donation.listing_type != "DONATION":
+            return Response(
+                {"error": "Only donation listings can be claimed by NGOs"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if not donation.is_ngo_priority_active():
+            return Response(
+                {"error": "NGO priority window has expired"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if donation.status != "AVAILABLE":
+            return Response(
+                {"error": "This donation is no longer available"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if DonationClaim.objects.filter(donation=donation).exists():
+            return Response(
+                {"error": "This donation has already been claimed"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        pickup_method = serializer.validated_data.get("pickup_method", "SELF")
+        claim = DonationClaim.objects.create(
+            donation=donation,
+            ngo=request.user,
+            pickup_method=pickup_method,
+            status="CONFIRMED",
+            scheduled_pickup_start=serializer.validated_data.get("scheduled_pickup_start"),
+            scheduled_pickup_end=serializer.validated_data.get("scheduled_pickup_end"),
+            volunteer_name=serializer.validated_data.get("volunteer_name", ""),
+            volunteer_phone=serializer.validated_data.get("volunteer_phone", ""),
+            donor_note=serializer.validated_data.get("donor_note", ""),
+            people_served_confirmed=serializer.validated_data.get("people_served_confirmed"),
+        )
+
+        donation.status = "CLAIMED"
+        donation.save(update_fields=["status", "updated_at"])
+
+        pickup_ticket = PickupTicket.objects.create(
+            donation=donation,
+            ticket_type="NGO_CLAIM",
+            claim=claim,
+        )
+
+        _create_qr_metadata_if_possible(pickup_ticket, donation)
+
+        claim_data = DonationClaimSerializer(claim).data
+        claim_data["pickup_ticket"] = {
+            "qr_code": pickup_ticket.qr_code,
+            "id": pickup_ticket.id,
+        }
+
+        return Response(
+            {
+                "message": "Donation claimed successfully",
+                "claim": claim_data,
+            },
+            status=status.HTTP_201_CREATED,
+        )
+
 
 class ConsumerReservationViewSet(viewsets.ModelViewSet):
 
@@ -637,6 +720,76 @@ class ConsumerReservationViewSet(viewsets.ModelViewSet):
             )
 
         return ConsumerReservation.objects.none()
+
+    def create(self, request, *args, **kwargs):
+        is_customer = request.user.role and request.user.role.upper() == "CUSTOMER"
+        if not (request.user.is_staff or is_customer):
+            return Response(
+                {"error": "Only consumers can reserve flash sales"},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        serializer = ConsumerReservationCreateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        donation = serializer.validated_data.get("donation")
+        if not donation:
+            return Response(
+                {"error": "donation or donation_id is required"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if donation.listing_type != "FLASH_SALE":
+            return Response(
+                {"error": "Only flash sale listings can be reserved"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if donation.status != "AVAILABLE":
+            return Response(
+                {"error": "This listing is no longer available"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if ConsumerReservation.objects.filter(
+            donation=donation,
+            consumer=request.user,
+        ).exists():
+            return Response(
+                {"error": "You have already reserved this listing"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        reservation = ConsumerReservation.objects.create(
+            donation=donation,
+            consumer=request.user,
+            status="CONFIRMED",
+        )
+
+        donation.status = "RESERVED"
+        donation.save(update_fields=["status", "updated_at"])
+
+        pickup_ticket = PickupTicket.objects.create(
+            donation=donation,
+            ticket_type="CONSUMER_RESERVATION",
+            reservation=reservation,
+        )
+
+        _create_qr_metadata_if_possible(pickup_ticket, donation)
+
+        reservation_data = ConsumerReservationSerializer(reservation).data
+        reservation_data["pickup_ticket"] = {
+            "qr_code": pickup_ticket.qr_code,
+            "id": pickup_ticket.id,
+        }
+
+        return Response(
+            {
+                "message": "Flash sale reserved successfully",
+                "reservation": reservation_data,
+            },
+            status=status.HTTP_201_CREATED,
+        )
 
 
 class ConsumerOrderViewSet(viewsets.ModelViewSet):
