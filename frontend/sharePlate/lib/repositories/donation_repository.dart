@@ -91,7 +91,6 @@ class DonationRepository implements IDonationRepository {
       longitude: longitude,
       radiusKm: radiusKm,
     );
-    print(list);
 
     return list
         .whereType<Map<String, dynamic>>()
