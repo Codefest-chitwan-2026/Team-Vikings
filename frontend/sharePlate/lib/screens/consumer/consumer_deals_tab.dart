@@ -1,6 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/constants/api_constants.dart';
 import '../../core/constants/app_colors.dart';
 import '../../models/donation_model.dart';
 import '../../providers/auth_provider.dart';
@@ -22,12 +25,26 @@ class _ConsumerDealsTabState extends State<ConsumerDealsTab> {
   String _searchQuery = '';
   FoodCategory? _selectedCategory;
 
+  // Periodic refresh timer to keep countdowns and the list fresh.
+  Timer? _refreshTimer;
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadFlashSales();
     });
+
+    // Rebuild every minute so best-before countdowns stay current.
+    _refreshTimer = Timer.periodic(const Duration(minutes: 1), (_) {
+      if (mounted) setState(() {});
+    });
+  }
+
+  @override
+  void dispose() {
+    _refreshTimer?.cancel();
+    super.dispose();
   }
 
   Future<void> _loadFlashSales() async {
@@ -39,39 +56,63 @@ class _ConsumerDealsTabState extends State<ConsumerDealsTab> {
   }
 
   List<DonationItem> _getFilteredSales(List<DonationItem> flashSales) {
-    return flashSales.where((item) {
+    // Sort newest-first by postedAgo semantics: items with rawJson created_at
+    // are sorted descending; others keep their original order.
+    final sorted = [...flashSales];
+    sorted.sort((a, b) {
+      final ta = _createdAt(a);
+      final tb = _createdAt(b);
+      if (ta == null && tb == null) return 0;
+      if (ta == null) return 1;
+      if (tb == null) return -1;
+      return tb.compareTo(ta); // newest first
+    });
+
+    return sorted.where((item) {
+      // Category filter
       if (_selectedCategory != null && item.category != _selectedCategory) {
         return false;
       }
+      // Search filter: matches title, address, or business name
       if (_searchQuery.isNotEmpty) {
         final query = _searchQuery.toLowerCase();
         final matchesTitle = item.title.toLowerCase().contains(query);
         final matchesAddress = item.pickupAddress.toLowerCase().contains(query);
-        return matchesTitle || matchesAddress;
+        final matchesBusiness =
+            (item.donorBusinessName ?? '').toLowerCase().contains(query);
+        return matchesTitle || matchesAddress || matchesBusiness;
       }
       return true;
     }).toList();
+  }
+
+  DateTime? _createdAt(DonationItem item) {
+    final raw = item.rawJson?['created_at']?.toString();
+    if (raw == null) return null;
+    return DateTime.tryParse(raw);
   }
 
   @override
   Widget build(BuildContext context) {
     final donationProvider = context.watch<DonationProvider>();
     final list = _getFilteredSales(donationProvider.flashSaleDonations);
+    final total = donationProvider.flashSaleDonations.length;
     final isLoading = donationProvider.isLoading;
 
     return SafeArea(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // ── Header ──────────────────────────────────────────────────────
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Column(
+                Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
+                    const Text(
                       'Flash Deals ⚡',
                       style: TextStyle(
                         fontSize: 24,
@@ -79,17 +120,22 @@ class _ConsumerDealsTabState extends State<ConsumerDealsTab> {
                         color: AppColors.textPrimary,
                       ),
                     ),
-                    SizedBox(height: 2),
+                    const SizedBox(height: 2),
                     Text(
-                      'Rescue premium meals at up to 70% off',
-                      style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
+                      total > 0
+                          ? '$total deal${total == 1 ? '' : 's'} • up to 70% off'
+                          : 'Rescue premium meals at up to 70% off',
+                      style: const TextStyle(
+                          fontSize: 13, color: AppColors.textSecondary),
                     ),
                   ],
                 ),
                 Row(
                   children: [
                     IconButton(
-                      icon: const Icon(Icons.refresh_rounded, color: AppColors.primaryEmerald),
+                      icon: const Icon(Icons.refresh_rounded,
+                          color: AppColors.primaryEmerald),
+                      tooltip: 'Refresh',
                       onPressed: _loadFlashSales,
                     ),
                     Material(
@@ -102,7 +148,8 @@ class _ConsumerDealsTabState extends State<ConsumerDealsTab> {
                         onTap: () {
                           Navigator.of(context).push(
                             MaterialPageRoute(
-                              builder: (_) => const ConsumerNotificationsScreen(),
+                              builder: (_) =>
+                                  const ConsumerNotificationsScreen(),
                             ),
                           );
                         },
@@ -124,18 +171,28 @@ class _ConsumerDealsTabState extends State<ConsumerDealsTab> {
           ),
           const SizedBox(height: 12),
 
-          // Search Bar
+          // ── Search Bar ───────────────────────────────────────────────────
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 20),
             child: TextField(
               onChanged: (v) => setState(() => _searchQuery = v),
               decoration: InputDecoration(
-                hintText: 'Search discount food, cafe, locality...',
-                hintStyle: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
-                prefixIcon: const Icon(Icons.search, size: 20, color: AppColors.textSecondary),
+                hintText: 'Search food, store, locality…',
+                hintStyle: const TextStyle(
+                    fontSize: 13, color: AppColors.textSecondary),
+                prefixIcon: const Icon(Icons.search,
+                    size: 20, color: AppColors.textSecondary),
+                suffixIcon: _searchQuery.isNotEmpty
+                    ? IconButton(
+                        icon: const Icon(Icons.close,
+                            size: 18, color: AppColors.textSecondary),
+                        onPressed: () => setState(() => _searchQuery = ''),
+                      )
+                    : null,
                 filled: true,
                 fillColor: const Color(0xFFF3F4F6),
-                contentPadding: const EdgeInsets.symmetric(vertical: 0, horizontal: 16),
+                contentPadding:
+                    const EdgeInsets.symmetric(vertical: 0, horizontal: 16),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
                   borderSide: BorderSide.none,
@@ -145,7 +202,7 @@ class _ConsumerDealsTabState extends State<ConsumerDealsTab> {
           ),
           const SizedBox(height: 12),
 
-          // Sponsor Charity Food Banner
+          // ── Sponsor Charity Food Banner ──────────────────────────────────
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 20),
             child: InkWell(
@@ -168,7 +225,8 @@ class _ConsumerDealsTabState extends State<ConsumerDealsTab> {
                       width: 40,
                       height: 40,
                       decoration: BoxDecoration(
-                        color: AppColors.primaryEmerald.withValues(alpha: 0.15),
+                        color:
+                            AppColors.primaryEmerald.withValues(alpha: 0.15),
                         shape: BoxShape.circle,
                       ),
                       child: const Icon(
@@ -203,9 +261,7 @@ class _ConsumerDealsTabState extends State<ConsumerDealsTab> {
                     ),
                     Container(
                       padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 6,
-                      ),
+                          horizontal: 10, vertical: 6),
                       decoration: BoxDecoration(
                         color: AppColors.primaryEmerald,
                         borderRadius: BorderRadius.circular(8),
@@ -237,7 +293,7 @@ class _ConsumerDealsTabState extends State<ConsumerDealsTab> {
           ),
           const SizedBox(height: 12),
 
-          // Category Chips
+          // ── Category Chips ───────────────────────────────────────────────
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -252,10 +308,12 @@ class _ConsumerDealsTabState extends State<ConsumerDealsTab> {
           ),
           const SizedBox(height: 12),
 
-          // Deals List
+          // ── Deals List ───────────────────────────────────────────────────
           Expanded(
-            child: isLoading
-                ? const Center(child: CircularProgressIndicator(color: AppColors.primaryEmerald))
+            child: isLoading && list.isEmpty
+                ? const Center(
+                    child: CircularProgressIndicator(
+                        color: AppColors.primaryEmerald))
                 : list.isEmpty
                     ? Center(
                         child: EmptyStateWidget(
@@ -272,18 +330,25 @@ class _ConsumerDealsTabState extends State<ConsumerDealsTab> {
                         onRefresh: _loadFlashSales,
                         color: AppColors.primaryEmerald,
                         child: ListView.separated(
-                          padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
+                          physics: const AlwaysScrollableScrollPhysics(),
+                          padding:
+                              const EdgeInsets.fromLTRB(20, 4, 20, 24),
                           itemCount: list.length,
-                          separatorBuilder: (context, index) => const SizedBox(height: 14),
+                          separatorBuilder: (_, __) =>
+                              const SizedBox(height: 14),
                           itemBuilder: (context, idx) {
                             final item = list[idx];
                             return _FlashSaleCard(
                               item: item,
-                              onTap: () => Navigator.of(context).push(
-                                MaterialPageRoute(
-                                  builder: (_) => ConsumerDealDetailScreen(deal: item),
-                                ),
-                              ),
+                              onTap: () => Navigator.of(context)
+                                  .push(
+                                    MaterialPageRoute(
+                                      builder: (_) =>
+                                          ConsumerDealDetailScreen(
+                                              deal: item),
+                                    ),
+                                  )
+                                  .then((_) => _loadFlashSales()),
                             );
                           },
                         ),
@@ -312,14 +377,18 @@ class _ConsumerDealsTabState extends State<ConsumerDealsTab> {
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(20),
           side: BorderSide(
-            color: isSelected ? AppColors.primaryEmerald : AppColors.border,
+            color:
+                isSelected ? AppColors.primaryEmerald : AppColors.border,
           ),
         ),
-        onSelected: (_) => setState(() => _selectedCategory = cat),
+        onSelected: (_) =>
+            setState(() => _selectedCategory = cat),
       ),
     );
   }
 }
+
+// ── Flash Sale Card ────────────────────────────────────────────────────────────
 
 class _FlashSaleCard extends StatelessWidget {
   const _FlashSaleCard({required this.item, required this.onTap});
@@ -327,13 +396,68 @@ class _FlashSaleCard extends StatelessWidget {
   final DonationItem item;
   final VoidCallback onTap;
 
+  /// Builds a full absolute image URL from whatever the backend stored.
+  /// If [imagePath] is already a full URL it is returned as-is.
+  static String? _resolveImageUrl(String? imagePath) {
+    if (imagePath == null || imagePath.isEmpty) return null;
+    if (imagePath.startsWith('http://') || imagePath.startsWith('https://')) {
+      return imagePath;
+    }
+    // Strip leading slash so we don't double up.
+    final relative =
+        imagePath.startsWith('/') ? imagePath.substring(1) : imagePath;
+    return '${ApiConstants.baseUrl}/$relative';
+  }
+
+  /// Returns the emoji icon for this food category.
+  static String _categoryEmoji(FoodCategory cat) {
+    switch (cat) {
+      case FoodCategory.veg:
+        return '🥗';
+      case FoodCategory.nonVeg:
+        return '🍗';
+      case FoodCategory.mixed:
+        return '🥐';
+    }
+  }
+
+  /// Returns a human-readable countdown until [dateTime].
+  /// Returns null if [dateTime] is null or already in the past.
+  static String? _countdown(DateTime? dateTime) {
+    if (dateTime == null) return null;
+    final diff = dateTime.difference(DateTime.now());
+    if (diff.isNegative) return 'Expired';
+    if (diff.inMinutes < 1) return 'Expires in <1 min';
+    if (diff.inHours < 1) return 'Expires in ${diff.inMinutes} min';
+    if (diff.inDays < 1) {
+      final h = diff.inHours;
+      final m = diff.inMinutes % 60;
+      return m > 0 ? 'Expires in ${h}h ${m}m' : 'Expires in ${h}h';
+    }
+    return 'Best before ${diff.inDays}d';
+  }
+
+  int _discountPercent() {
+    if (item.originalPrice != null &&
+        item.discountedPrice != null &&
+        item.originalPrice! > 0) {
+      return (((item.originalPrice! - item.discountedPrice!) /
+                  item.originalPrice!) *
+              100)
+          .round();
+    }
+    return 50;
+  }
+
   @override
   Widget build(BuildContext context) {
-    final discountPercent = (item.originalPrice != null &&
-            item.discountedPrice != null &&
-            item.originalPrice! > 0)
-        ? (((item.originalPrice! - item.discountedPrice!) / item.originalPrice!) * 100).round()
-        : 50;
+    final imageUrl = _resolveImageUrl(item.imagePath);
+    final countdown = _countdown(item.bestBefore);
+    final isExpiring =
+        item.bestBefore != null &&
+        item.bestBefore!.difference(DateTime.now()).inHours < 2 &&
+        !item.bestBefore!.isBefore(DateTime.now());
+    final discountPct = _discountPercent();
 
     return Material(
       color: Colors.white,
@@ -347,112 +471,352 @@ class _FlashSaleCard extends StatelessWidget {
             borderRadius: BorderRadius.circular(16),
             border: Border.all(color: AppColors.border),
           ),
-          padding: const EdgeInsets.all(14),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Container(
-                    width: 52,
-                    height: 52,
-                    decoration: BoxDecoration(
-                      color: AppColors.cardLightBg,
-                      borderRadius: BorderRadius.circular(12),
+              // ── Hero Image (or emoji fallback) ─────────────────────────
+              _buildHeroImage(imageUrl, discountPct, isExpiring, countdown),
+
+              // ── Card Body ───────────────────────────────────────────────
+              Padding(
+                padding: const EdgeInsets.fromLTRB(14, 10, 14, 14),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Title
+                    Text(
+                      item.title,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.textPrimary,
+                      ),
                     ),
-                    alignment: Alignment.center,
-                    child: Text(
-                      item.category == FoodCategory.veg ? '🥗' : (item.category == FoodCategory.nonVeg ? '🍗' : '🥐'),
-                      style: const TextStyle(fontSize: 26),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                    const SizedBox(height: 4),
+
+                    // Business name + posted-ago row
+                    Row(
                       children: [
-                        Text(
-                          item.title,
-                          style: const TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.bold,
-                            color: AppColors.textPrimary,
+                        const Icon(Icons.storefront_outlined,
+                            size: 13, color: AppColors.textSecondary),
+                        const SizedBox(width: 4),
+                        Expanded(
+                          child: Text(
+                            item.donorBusinessName ??
+                                item.pickupAddress,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: AppColors.textSecondary,
+                            ),
                           ),
                         ),
-                        const SizedBox(height: 2),
-                        Text(
-                          '${item.pickupAddress} · ${item.servesApprox}',
-                          style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                        if (item.postedAgo.isNotEmpty) ...[
+                          const SizedBox(width: 6),
+                          Text(
+                            item.postedAgo,
+                            style: const TextStyle(
+                              fontSize: 11,
+                              color: AppColors.textSecondary,
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+
+                    // Pickup address (only if we already showed business name above)
+                    if (item.donorBusinessName != null &&
+                        item.donorBusinessName!.isNotEmpty)
+                      Row(
+                        children: [
+                          const Icon(Icons.location_on_outlined,
+                              size: 13, color: AppColors.textSecondary),
+                          const SizedBox(width: 4),
+                          Expanded(
+                            child: Text(
+                              item.pickupAddress,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                fontSize: 12,
+                                color: AppColors.textSecondary,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+
+                    const SizedBox(height: 8),
+
+                    // Info chips row: quantity, serves, pickup window
+                    SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        children: [
+                          _infoChip(
+                            Icons.inventory_2_outlined,
+                            '${item.quantity} ${item.quantityUnit}',
+                          ),
+                          const SizedBox(width: 6),
+                          _infoChip(
+                            Icons.people_outline,
+                            item.servesApprox,
+                          ),
+                          const SizedBox(width: 6),
+                          _infoChip(
+                            Icons.schedule_outlined,
+                            'Pickup: ${item.pickupWindow}',
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    const SizedBox(height: 10),
+                    const Divider(height: 1, color: AppColors.border),
+                    const SizedBox(height: 10),
+
+                    // Price row + reserve button
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.baseline,
+                          textBaseline: TextBaseline.alphabetic,
+                          children: [
+                            if (item.originalPrice != null) ...[
+                              Text(
+                                'Rs ${item.originalPrice!.toInt()}',
+                                style: const TextStyle(
+                                  fontSize: 13,
+                                  color: AppColors.textSecondary,
+                                  decoration: TextDecoration.lineThrough,
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+                            ],
+                            Text(
+                              'Rs ${(item.discountedPrice ?? 150).toInt()}',
+                              style: const TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.w900,
+                                color: AppColors.primaryEmerald,
+                              ),
+                            ),
+                          ],
+                        ),
+                        GestureDetector(
+                          onTap: onTap,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 14, vertical: 8),
+                            decoration: BoxDecoration(
+                              color: AppColors.primaryEmerald,
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: const Text(
+                              'Reserve Deal →',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ),
                         ),
                       ],
                     ),
-                  ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFFFEBEE),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Text(
-                      '$discountPercent% OFF',
-                      style: const TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w900,
-                        color: Color(0xFFC62828),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              const Divider(height: 1, color: AppColors.border),
-              const SizedBox(height: 10),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Row(
-                    children: [
-                      if (item.originalPrice != null)
-                        Text(
-                          'Rs ${item.originalPrice!.toInt()}',
-                          style: const TextStyle(
-                            fontSize: 13,
-                            color: AppColors.textSecondary,
-                            decoration: TextDecoration.lineThrough,
-                          ),
-                        ),
-                      if (item.originalPrice != null) const SizedBox(width: 8),
-                      Text(
-                        'Rs ${(item.discountedPrice ?? 150).toInt()}',
-                        style: const TextStyle(
-                          fontSize: 17,
-                          fontWeight: FontWeight.w900,
-                          color: AppColors.primaryEmerald,
-                        ),
-                      ),
-                    ],
-                  ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: AppColors.primaryEmerald,
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: const Text(
-                      'Reserve Deal →',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                      ),
-                    ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildHeroImage(
+    String? imageUrl,
+    int discountPct,
+    bool isExpiring,
+    String? countdown,
+  ) {
+    return ClipRRect(
+      borderRadius:
+          const BorderRadius.vertical(top: Radius.circular(16)),
+      child: SizedBox(
+        height: 150,
+        width: double.infinity,
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            // Image or emoji placeholder
+            if (imageUrl != null)
+              Image.network(
+                imageUrl,
+                fit: BoxFit.cover,
+                loadingBuilder: (_, child, progress) {
+                  if (progress == null) return child;
+                  return Container(
+                    color: AppColors.cardLightBg,
+                    alignment: Alignment.center,
+                    child: CircularProgressIndicator(
+                      value: progress.expectedTotalBytes != null
+                          ? progress.cumulativeBytesLoaded /
+                              progress.expectedTotalBytes!
+                          : null,
+                      color: AppColors.primaryEmerald,
+                      strokeWidth: 2,
+                    ),
+                  );
+                },
+                errorBuilder: (_, __, ___) => _emojiPlaceholder(),
+              )
+            else
+              _emojiPlaceholder(),
+
+            // Subtle dark gradient at the bottom to keep text legible
+            if (imageUrl != null)
+              const DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [Colors.transparent, Color(0x66000000)],
+                    stops: [0.5, 1.0],
+                  ),
+                ),
+              ),
+
+            // Discount badge — top-left
+            Positioned(
+              top: 10,
+              left: 10,
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFC62828),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  '$discountPct% OFF',
+                  style: const TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w900,
+                    color: Colors.white,
+                    letterSpacing: 0.3,
+                  ),
+                ),
+              ),
+            ),
+
+            // Category label — top-right
+            Positioned(
+              top: 10,
+              right: 10,
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.9),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  item.category == FoodCategory.veg
+                      ? '🌱 Veg'
+                      : item.category == FoodCategory.nonVeg
+                          ? '🍗 Non-Veg'
+                          : '🥐 Mixed',
+                  style: const TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+              ),
+            ),
+
+            // Best-before / expiry countdown — bottom-left
+            if (countdown != null)
+              Positioned(
+                bottom: 10,
+                left: 10,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: isExpiring
+                        ? const Color(0xFFE53935).withValues(alpha: 0.9)
+                        : Colors.black54,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        isExpiring
+                            ? Icons.warning_amber_rounded
+                            : Icons.timer_outlined,
+                        size: 12,
+                        color: Colors.white,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        countdown,
+                        style: const TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _emojiPlaceholder() {
+    return Container(
+      color: AppColors.cardLightBg,
+      alignment: Alignment.center,
+      child: Text(
+        _categoryEmoji(item.category),
+        style: const TextStyle(fontSize: 52),
+      ),
+    );
+  }
+
+  Widget _infoChip(IconData icon, String label) {
+    return Container(
+      padding:
+          const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF3F4F6),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 12, color: AppColors.textSecondary),
+          const SizedBox(width: 4),
+          Text(
+            label,
+            style: const TextStyle(
+              fontSize: 11,
+              color: AppColors.textSecondary,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ],
       ),
     );
   }

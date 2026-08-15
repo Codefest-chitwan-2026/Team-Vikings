@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import '../core/errors/error_sanitizer.dart';
@@ -19,14 +21,76 @@ class DonationProvider extends ChangeNotifier {
     IContributionRepository? contributionRepository,
   })  : _donationRepository = donationRepository ?? DonationRepository(),
         _profileRepository = profileRepository ?? ProfileRepository(),
-        _contributionRepository = contributionRepository ?? ContributionRepository();
+        _contributionRepository = contributionRepository ?? ContributionRepository() {
+    // Check every 60 seconds and remove listings whose pickup window has ended.
+    _expiryTimer = Timer.periodic(const Duration(seconds: 60), (_) {
+      _pruneExpired();
+    });
+  }
 
+  Timer? _expiryTimer;
   bool _isDisposed = false;
 
   @override
   void dispose() {
+    _expiryTimer?.cancel();
     _isDisposed = true;
     super.dispose();
+  }
+
+  // ── Expiry pruning ─────────────────────────────────────────────────────────
+
+  /// Returns true when a donation's pickup window has definitively ended.
+  ///
+  /// Rules (in priority order):
+  ///   1. `bestBefore` in the past → always expired.
+  ///   2. `priorityExpiresAt` in the past AND the item is still unclaimed →
+  ///      the NGO window closed; remove it from the NGO/free lists so it
+  ///      stops showing to recipients.
+  ///   3. If neither date is set we leave it alone (we don't have enough
+  ///      information to evict it client-side).
+  static bool _isExpired(DonationItem item) {
+    final now = DateTime.now();
+
+    // bestBefore is the hard deadline for the food itself.
+    if (item.bestBefore != null && item.bestBefore!.isBefore(now)) {
+      return true;
+    }
+
+    // priorityExpiresAt controls NGO exclusive access. Once it lapses and the
+    // item is still unclaimed we remove it from the NGO feed. (The backend
+    // will have converted it to a flash sale by this point.)
+    if (item.priorityExpiresAt != null &&
+        item.priorityExpiresAt!.isBefore(now) &&
+        item.status == DonationStatus.awaitingClaim) {
+      return true;
+    }
+
+    return false;
+  }
+
+  /// Walk all in-memory lists and evict items whose window has ended.
+  /// Only notifies if something actually changed.
+  void _pruneExpired() {
+    if (_isDisposed) return;
+
+    final beforeActive = _activeDonations.length;
+    final beforeNgo = _ngoPriorityDonations.length;
+    final beforeFlash = _flashSaleDonations.length;
+
+    _activeDonations.removeWhere(_isExpired);
+    _ngoPriorityDonations.removeWhere(_isExpired);
+    // For flash sales only bestBefore applies (no priority window).
+    _flashSaleDonations.removeWhere((item) =>
+        item.bestBefore != null && item.bestBefore!.isBefore(DateTime.now()));
+
+    final changed = _activeDonations.length != beforeActive ||
+        _ngoPriorityDonations.length != beforeNgo ||
+        _flashSaleDonations.length != beforeFlash;
+
+    if (changed) {
+      notifyListeners();
+    }
   }
 
   @override
@@ -90,6 +154,8 @@ class DonationProvider extends ChangeNotifier {
           _pastDonations.add(donation);
         }
       }
+      // Drop any item whose pickup window has already ended.
+      _activeDonations.removeWhere(_isExpired);
     } catch (e) {
       _errorMessage = ErrorSanitizer.sanitize(e, defaultMessage: 'Unable to load donations at this moment.');
     } finally {
@@ -115,6 +181,8 @@ class DonationProvider extends ChangeNotifier {
       debugPrint('[DonationProvider] fetchNgoPriorityListings: got ${list.length} item(s) back');
       _ngoPriorityDonations.clear();
       _ngoPriorityDonations.addAll(list);
+      // Drop any item whose priority window has already ended.
+      _ngoPriorityDonations.removeWhere(_isExpired);
     } catch (e, st) {
       debugPrint('[DonationProvider] fetchNgoPriorityListings: FAILED — $e');
       debugPrint('$st');
@@ -137,6 +205,9 @@ class DonationProvider extends ChangeNotifier {
       final list = await _donationRepository.getFlashSales(token: token);
       _flashSaleDonations.clear();
       _flashSaleDonations.addAll(list);
+      // Drop flash sales whose food has already expired.
+      _flashSaleDonations.removeWhere((item) =>
+          item.bestBefore != null && item.bestBefore!.isBefore(DateTime.now()));
     } catch (e) {
       _errorMessage = ErrorSanitizer.sanitize(e, defaultMessage: 'Unable to load discount deals.');
     } finally {
@@ -314,6 +385,12 @@ class DonationProvider extends ChangeNotifier {
       }
     }
     return true;
+  }
+
+  /// Remove a flash sale item from the local list immediately after reservation.
+  void removeFlashSale(String id) {
+    _flashSaleDonations.removeWhere((d) => d.id == id);
+    notifyListeners();
   }
 
   /// Reserve a flash sale listing (Customer role)
