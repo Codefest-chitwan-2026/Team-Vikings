@@ -14,10 +14,14 @@ class AuthApiService {
     required String phoneNum,
     required String password,
   }) async {
+    final trimmed = phoneNum.trim();
+    final isEmail = trimmed.contains('@');
     final response = await _client.post(
       ApiConstants.login,
       body: {
-        'phone_num': phoneNum,
+        'phone_num': trimmed,
+        'email': isEmail ? trimmed : '',
+        'username': trimmed,
         'password': password,
       },
     );

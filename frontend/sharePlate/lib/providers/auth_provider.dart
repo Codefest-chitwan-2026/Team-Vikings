@@ -1,24 +1,24 @@
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/widgets.dart';
-import '../core/errors/app_exceptions.dart';
+import '../core/errors/error_sanitizer.dart';
 import '../models/business_registration_model.dart';
 import '../models/ngo_model.dart';
 import '../models/user_model.dart';
 import '../models/verification_document_model.dart';
 import '../repositories/auth_repository.dart';
-import '../services/profile_api_service.dart';
+import '../repositories/profile_repository.dart';
 
 enum AuthStatus { initial, unauthenticated, authenticating, authenticated, failure }
 
 class AuthProvider extends ChangeNotifier {
   final IAuthRepository _authRepository;
-  final ProfileApiService _profileApiService;
+  final IProfileRepository _profileRepository;
 
   AuthProvider({
     required IAuthRepository authRepository,
-    ProfileApiService? profileApiService,
+    IProfileRepository? profileRepository,
   })  : _authRepository = authRepository,
-        _profileApiService = profileApiService ?? ProfileApiService();
+        _profileRepository = profileRepository ?? ProfileRepository();
 
   bool _isDisposed = false;
 
@@ -93,7 +93,6 @@ class AuthProvider extends ChangeNotifier {
         _currentUser = _authRepository.getCurrentUser();
         if (_currentUser != null) {
           _status = AuthStatus.authenticated;
-          // Sync profile from backend
           await syncProfileFromBackend();
         } else {
           _status = AuthStatus.unauthenticated;
@@ -115,7 +114,7 @@ class AuthProvider extends ChangeNotifier {
     if (token == null || token.isEmpty) return;
 
     try {
-      final profileData = await _profileApiService.getMyProfile(token: token);
+      final profileData = await _profileRepository.getMyProfile(token: token);
       if (profileData.isNotEmpty && _currentUser != null) {
         final String name = profileData['full_name'] ??
             profileData['business_name'] ??
@@ -139,7 +138,7 @@ class AuthProvider extends ChangeNotifier {
         notifyListeners();
       }
     } catch (_) {
-      // Keep local state if server is offline
+      // Keep local state if server is temporarily unreachable
     }
   }
 
@@ -164,14 +163,8 @@ class AuthProvider extends ChangeNotifier {
       _isLoading = false;
       notifyListeners();
       return true;
-    } on ValidationException catch (e) {
-      _errorMessage = e.firstError;
-      _status = AuthStatus.failure;
-    } on AppException catch (e) {
-      _errorMessage = e.message;
-      _status = AuthStatus.failure;
     } catch (e) {
-      _errorMessage = 'An unexpected error occurred. Please try again.';
+      _errorMessage = ErrorSanitizer.sanitize(e, defaultMessage: 'Incorrect credentials or unable to sign in.');
       _status = AuthStatus.failure;
     } finally {
       _isLoading = false;
@@ -205,14 +198,8 @@ class AuthProvider extends ChangeNotifier {
       _isLoading = false;
       notifyListeners();
       return true;
-    } on ValidationException catch (e) {
-      _errorMessage = e.firstError;
-      _status = AuthStatus.failure;
-    } on AppException catch (e) {
-      _errorMessage = e.message;
-      _status = AuthStatus.failure;
     } catch (e) {
-      _errorMessage = 'Failed to register customer account. Please try again.';
+      _errorMessage = ErrorSanitizer.sanitize(e, defaultMessage: 'Failed to create customer account. Please try again.');
       _status = AuthStatus.failure;
     } finally {
       _isLoading = false;
@@ -254,14 +241,8 @@ class AuthProvider extends ChangeNotifier {
       _isLoading = false;
       notifyListeners();
       return true;
-    } on ValidationException catch (e) {
-      _errorMessage = e.firstError;
-      _status = AuthStatus.failure;
-    } on AppException catch (e) {
-      _errorMessage = e.message;
-      _status = AuthStatus.failure;
     } catch (e) {
-      _errorMessage = 'Failed to register business account. Please try again.';
+      _errorMessage = ErrorSanitizer.sanitize(e, defaultMessage: 'Failed to register business account. Please try again.');
       _status = AuthStatus.failure;
     } finally {
       _isLoading = false;
@@ -303,14 +284,8 @@ class AuthProvider extends ChangeNotifier {
       _isLoading = false;
       notifyListeners();
       return true;
-    } on ValidationException catch (e) {
-      _errorMessage = e.firstError;
-      _status = AuthStatus.failure;
-    } on AppException catch (e) {
-      _errorMessage = e.message;
-      _status = AuthStatus.failure;
     } catch (e) {
-      _errorMessage = 'Failed to register NGO account. Please try again.';
+      _errorMessage = ErrorSanitizer.sanitize(e, defaultMessage: 'Failed to register NGO account. Please try again.');
       _status = AuthStatus.failure;
     } finally {
       _isLoading = false;
@@ -345,14 +320,11 @@ class AuthProvider extends ChangeNotifier {
       );
       notifyListeners();
 
-      // Sync with backend PATCH /api/profiles/me/
       final token = _currentUser?.token;
       if (token != null && token.isNotEmpty) {
         try {
           final fields = <String, String>{};
-          if (name != null) {
-            if (_currentUser!.isConsumer) fields['full_name'] = name;
-          }
+          if (name != null && _currentUser!.isConsumer) fields['full_name'] = name;
           if (organizationName != null) {
             if (_currentUser!.isDonor) fields['business_name'] = organizationName;
             if (_currentUser!.isNgo) fields['organization_name'] = organizationName;
@@ -362,15 +334,13 @@ class AuthProvider extends ChangeNotifier {
           if (email != null) fields['email'] = email;
 
           if (fields.isNotEmpty || documentFilePath != null) {
-            await _profileApiService.updateMyProfile(
+            await _profileRepository.updateMyProfile(
               token: token,
               fields: fields,
               registrationDocumentPath: documentFilePath,
             );
           }
-        } catch (_) {
-          // Keep local state update
-        }
+        } catch (_) {}
       }
     }
   }
@@ -398,13 +368,16 @@ class AuthProvider extends ChangeNotifier {
     }
     notifyListeners();
 
-    // If local file was uploaded, sync to backend profile
     if (updatedDoc.localFilePath != null && _currentUser?.token != null) {
-      _profileApiService.updateMyProfile(
+      _profileRepository.uploadVerificationDocument(
         token: _currentUser!.token!,
-        fields: {},
-        registrationDocumentPath: updatedDoc.localFilePath,
-      ).catchError((_) => <String, dynamic>{});
+        fields: {
+          'title': updatedDoc.title,
+          'issued_id_number': updatedDoc.issuedIdNumber ?? '',
+          'issuer_authority': updatedDoc.issuerAuthority ?? '',
+        },
+        filePath: updatedDoc.localFilePath!,
+      ).catchError((_) => updatedDoc);
     }
   }
 
@@ -422,11 +395,15 @@ class AuthProvider extends ChangeNotifier {
     notifyListeners();
 
     if (newDoc.localFilePath != null && _currentUser?.token != null) {
-      _profileApiService.updateMyProfile(
+      _profileRepository.uploadVerificationDocument(
         token: _currentUser!.token!,
-        fields: {},
-        registrationDocumentPath: newDoc.localFilePath,
-      ).catchError((_) => <String, dynamic>{});
+        fields: {
+          'title': newDoc.title,
+          'issued_id_number': newDoc.issuedIdNumber ?? '',
+          'issuer_authority': newDoc.issuerAuthority ?? '',
+        },
+        filePath: newDoc.localFilePath!,
+      ).catchError((_) => newDoc);
     }
   }
 

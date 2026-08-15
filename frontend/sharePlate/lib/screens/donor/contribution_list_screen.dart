@@ -3,7 +3,10 @@ import 'package:provider/provider.dart';
 import '../../core/constants/app_colors.dart';
 import '../../models/contribution_model.dart';
 import '../../models/donation_model.dart';
+import '../../providers/auth_provider.dart';
 import '../../providers/donation_provider.dart';
+import '../../widgets/shared/empty_state_widget.dart';
+import 'add_donation_screen.dart';
 import 'contribution_detail_screen.dart';
 
 enum ContributionFilter { all, completed, inProgress, veg, nonVeg }
@@ -18,6 +21,18 @@ class ContributionListScreen extends StatefulWidget {
 class _ContributionListScreenState extends State<ContributionListScreen> {
   final TextEditingController _searchController = TextEditingController();
   ContributionFilter _selectedFilter = ContributionFilter.all;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final auth = context.read<AuthProvider>();
+      final token = auth.currentUser?.token;
+      if (token != null && token.isNotEmpty) {
+        context.read<DonationProvider>().fetchContributions(token: token);
+      }
+    });
+  }
 
   @override
   void dispose() {
@@ -55,7 +70,8 @@ class _ContributionListScreenState extends State<ContributionListScreen> {
   @override
   Widget build(BuildContext context) {
     final donationProvider = context.watch<DonationProvider>();
-    final filteredList = _filterContributions(donationProvider.contributions);
+    final allContributions = donationProvider.contributions;
+    final filteredList = _filterContributions(allContributions);
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -78,98 +94,117 @@ class _ContributionListScreenState extends State<ContributionListScreen> {
       body: SafeArea(
         child: Column(
           children: [
-            // Search Field
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
-              child: Container(
-                decoration: BoxDecoration(
-                  color: AppColors.surface,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: AppColors.border),
-                ),
-                child: TextField(
-                  controller: _searchController,
-                  onChanged: (_) => setState(() {}),
-                  decoration: InputDecoration(
-                    hintText: 'Search by NGO, food item or location...',
-                    hintStyle: TextStyle(
-                      fontSize: 13,
-                      color: AppColors.textSecondary.withValues(alpha: 0.6),
+            if (allContributions.isNotEmpty) ...[
+              // Search Field
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: AppColors.surface,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: AppColors.border),
+                  ),
+                  child: TextField(
+                    controller: _searchController,
+                    onChanged: (_) => setState(() {}),
+                    decoration: InputDecoration(
+                      hintText: 'Search by NGO, food item or location...',
+                      hintStyle: TextStyle(
+                        fontSize: 13,
+                        color: AppColors.textSecondary.withValues(alpha: 0.6),
+                      ),
+                      prefixIcon: const Icon(Icons.search, color: AppColors.textSecondary, size: 20),
+                      suffixIcon: _searchController.text.isNotEmpty
+                          ? IconButton(
+                              icon: const Icon(Icons.clear, size: 18),
+                              onPressed: () {
+                                _searchController.clear();
+                                setState(() {});
+                              },
+                            )
+                          : null,
+                      border: InputBorder.none,
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                     ),
-                    prefixIcon: const Icon(Icons.search, color: AppColors.textSecondary, size: 20),
-                    suffixIcon: _searchController.text.isNotEmpty
-                        ? IconButton(
-                            icon: const Icon(Icons.clear, size: 18),
-                            onPressed: () {
-                              _searchController.clear();
-                              setState(() {});
-                            },
-                          )
-                        : null,
-                    border: InputBorder.none,
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                   ),
                 ),
               ),
-            ),
 
-            // Horizontal Filter Chips
-            SizedBox(
-              height: 38,
-              child: ListView(
-                scrollDirection: Axis.horizontal,
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-                children: [
-                  _filterChip('All', ContributionFilter.all),
-                  const SizedBox(width: 8),
-                  _filterChip('Completed', ContributionFilter.completed),
-                  const SizedBox(width: 8),
-                  _filterChip('In Progress', ContributionFilter.inProgress),
-                  const SizedBox(width: 8),
-                  _filterChip('Vegetarian', ContributionFilter.veg),
-                  const SizedBox(width: 8),
-                  _filterChip('Non-Veg / Mixed', ContributionFilter.nonVeg),
-                ],
+              // Horizontal Filter Chips
+              SizedBox(
+                height: 38,
+                child: ListView(
+                  scrollDirection: Axis.horizontal,
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  children: [
+                    _filterChip('All', ContributionFilter.all),
+                    const SizedBox(width: 8),
+                    _filterChip('Completed', ContributionFilter.completed),
+                    const SizedBox(width: 8),
+                    _filterChip('In Progress', ContributionFilter.inProgress),
+                    const SizedBox(width: 8),
+                    _filterChip('Vegetarian', ContributionFilter.veg),
+                    const SizedBox(width: 8),
+                    _filterChip('Non-Veg / Mixed', ContributionFilter.nonVeg),
+                  ],
+                ),
               ),
-            ),
+              const SizedBox(height: 12),
+            ],
 
-            const SizedBox(height: 12),
-
-            // Contribution Cards List
+            // Contribution Cards List / Empty States
             Expanded(
-              child: filteredList.isEmpty
-                  ? Center(
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(Icons.volunteer_activism_outlined, size: 54, color: AppColors.textSecondary.withValues(alpha: 0.4)),
-                          const SizedBox(height: 12),
-                          const Text(
-                            'No contributions found',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                              color: AppColors.textPrimary,
-                            ),
+              child: allContributions.isEmpty
+                  ? EmptyStateWidget(
+                      icon: Icons.volunteer_activism_rounded,
+                      title: 'No Contributions Yet',
+                      description:
+                          'Publish your surplus food to support verified NGO partners, reduce kitchen waste, and track your verified sustainability impact.',
+                      buttonText: 'Create Your First Contribution',
+                      buttonIcon: Icons.add_rounded,
+                      onButtonPressed: () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => const AddDonationScreen(),
                           ),
-                          const SizedBox(height: 4),
-                          const Text(
-                            'Try changing your search or active filter.',
-                            style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
-                          ),
-                          const SizedBox(height: 16),
-                          TextButton(
-                            onPressed: () {
-                              setState(() {
-                                _searchController.clear();
-                                _selectedFilter = ContributionFilter.all;
-                              });
-                            },
-                            child: const Text('Reset filters'),
-                          ),
-                        ],
-                      ),
+                        );
+                      },
                     )
+                  : filteredList.isEmpty
+                      ? Center(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.volunteer_activism_outlined,
+                                  size: 54,
+                                  color: AppColors.textSecondary.withValues(alpha: 0.4)),
+                              const SizedBox(height: 12),
+                              const Text(
+                                'No contributions match filters',
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                  color: AppColors.textPrimary,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              const Text(
+                                'Try changing your search keywords or active filter.',
+                                style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
+                              ),
+                              const SizedBox(height: 16),
+                              TextButton(
+                                onPressed: () {
+                                  setState(() {
+                                    _searchController.clear();
+                                    _selectedFilter = ContributionFilter.all;
+                                  });
+                                },
+                                child: const Text('Reset filters'),
+                              ),
+                            ],
+                          ),
+                        )
                   : ListView.separated(
                       padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
                       itemCount: filteredList.length,

@@ -5,28 +5,36 @@ from users.models import User
 
 
 class LoginSerializer(serializers.Serializer):
-    phone_num = serializers.CharField()
+    phone_num = serializers.CharField(required=False, allow_blank=True)
+    email = serializers.CharField(required=False, allow_blank=True)
+    username = serializers.CharField(required=False, allow_blank=True)
     password = serializers.CharField(
         write_only=True
     )
 
     def validate(self, attrs):
-        phone_num = attrs.get("phone_num")
-        password = attrs.get("password")
+        phone_num = (attrs.get("phone_num") or "").strip()
+        email = (attrs.get("email") or "").strip()
+        username = (attrs.get("username") or "").strip()
+        password = attrs.get("password") or ""
 
-        if not phone_num or not password:
+        identifier = phone_num or email or username
+        if not identifier or not password:
             raise serializers.ValidationError(
-                "Phone number and password are required."
+                "Phone number or email, and password are required."
             )
 
-        user = authenticate(
-            username=phone_num,
-            password=password
-        )
+        user = None
+        if "@" in identifier:
+            user = User.objects.filter(email__iexact=identifier).first()
+        else:
+            user = User.objects.filter(phone_num=identifier).first()
+            if user is None:
+                user = User.objects.filter(email__iexact=identifier).first()
 
-        if user is None:
+        if user is None or not user.check_password(password):
             raise serializers.ValidationError(
-                "Invalid phone number or password."
+                "Invalid email or password."
             )
 
         if not user.is_active:

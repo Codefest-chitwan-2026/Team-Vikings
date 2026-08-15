@@ -38,11 +38,13 @@ class ConsumerProfileScreen extends StatelessWidget {
     final authProvider = context.watch<AuthProvider>();
     final user = authProvider.currentUser;
 
-    final name = user?.displayName.isNotEmpty == true ? user!.displayName : 'Rojina Shrestha';
+    final name = user != null && user.displayName.isNotEmpty
+        ? user.displayName
+        : (user?.email ?? 'SharePlate Member');
     final subtitle = user?.email.isNotEmpty == true
         ? 'Customer · ${user!.email}'
         : 'Customer · SharePlate Member';
-    final initials = user?.initials ?? 'RS';
+    final initials = user?.initials ?? 'SP';
     final avatarPath = user?.profileData?['avatar_path'] as String?;
 
     return SafeArea(

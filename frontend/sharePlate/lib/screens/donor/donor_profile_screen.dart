@@ -48,11 +48,13 @@ class DonorProfileScreen extends StatelessWidget {
 
     final bizName = user?.organizationName != null && user!.organizationName!.isNotEmpty
         ? user.organizationName!
-        : (user?.displayName.isNotEmpty == true ? user!.displayName : 'Himalayan Bites Cafe');
+        : (user != null && user.displayName.isNotEmpty
+            ? user.displayName
+            : (user?.email ?? 'Food Business'));
     final bizSubtitle = user?.email.isNotEmpty == true
         ? 'Donor · ${user!.email}'
         : 'Donor · Food Business';
-    final bizInitials = user?.initials ?? 'HB';
+    final bizInitials = user?.initials ?? 'FB';
     final avatarPath = user?.profileData?['avatar_path'] as String?;
 
     return SafeArea(

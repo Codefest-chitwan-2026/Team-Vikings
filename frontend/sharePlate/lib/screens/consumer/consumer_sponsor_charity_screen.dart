@@ -4,6 +4,8 @@ import 'package:provider/provider.dart';
 import '../../core/constants/app_colors.dart';
 import '../../models/surplus_sponsor_model.dart';
 import '../../providers/auth_provider.dart';
+import '../../providers/sponsorship_provider.dart';
+import '../../widgets/shared/empty_state_widget.dart';
 
 class ConsumerSponsorCharityScreen extends StatefulWidget {
   const ConsumerSponsorCharityScreen({super.key});
@@ -18,33 +20,47 @@ class _ConsumerSponsorCharityScreenState
   String _searchQuery = '';
   final TextEditingController _searchController = TextEditingController();
 
-  // User sponsored meal records in current session
-  final List<Map<String, dynamic>> _userSponsorships = [
-    {
-      'id': 'SPN-8842',
-      'foodTitle': 'Surplus Dinner Buffet: Dal Bhat & Paneer',
-      'donorName': 'Hotel Annapurna Kitchen',
-      'mealsCount': 20,
-      'amount': 1600,
-      'originalValue': 7600,
-      'savings': 6000,
-      'date': 'Yesterday, 7:15 PM',
-      'status': 'Sponsorship Confirmed',
-      'dedication': 'Dedicated by Rojina Shrestha',
-    },
-    {
-      'id': 'SPN-4310',
-      'foodTitle': 'Fresh Croissants & Sandwich Boxes',
-      'donorName': 'Chitwan Black Forest Bakery',
-      'mealsCount': 24,
-      'amount': 1440,
-      'originalValue': 5280,
-      'savings': 3840,
-      'date': '12 Aug 2026',
-      'status': 'Sponsorship Confirmed',
-      'dedication': 'In loving memory of Grandmother',
-    },
-  ];
+  final List<Map<String, dynamic>> _userSponsorships = [];
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _fetchData();
+    });
+  }
+
+  Future<void> _fetchData() async {
+    final auth = context.read<AuthProvider>();
+    final token = auth.currentUser?.token;
+    final sp = context.read<SponsorshipProvider>();
+    await sp.fetchSponsorshipItems(token: token);
+    if (token != null && token.isNotEmpty) {
+      await sp.fetchMySponsorships(token: token);
+      final mySps = sp.mySponsorships;
+      setState(() {
+        _userSponsorships.clear();
+        for (final s in mySps) {
+          if (s is Map<String, dynamic>) {
+            _userSponsorships.add({
+              'id': (s['id'] ?? 'SPN-${s.hashCode.abs()}').toString(),
+              'foodTitle': (s['food_title'] ?? 'Surplus Meal Package').toString(),
+              'donorName': (s['donor_name'] ?? 'Restaurant Partner').toString(),
+              'mealsCount': int.tryParse(s['meals_count']?.toString() ?? '10') ?? 10,
+              'amount': double.tryParse(s['amount']?.toString() ?? '800')?.round() ?? 800,
+              'originalValue': double.tryParse(s['original_value']?.toString() ?? '3000')?.round() ?? 3000,
+              'savings': double.tryParse(s['savings']?.toString() ?? '2200')?.round() ?? 2200,
+              'date': s['created_at'] != null ? s['created_at'].toString().split('T').first : 'Recently',
+              'status': (s['status'] ?? 'CONFIRMED').toString().toUpperCase() == 'CONFIRMED'
+                  ? 'Sponsorship Confirmed'
+                  : 'Processing',
+              'dedication': (s['dedication'] ?? '').toString(),
+            });
+          }
+        }
+      });
+    }
+  }
 
   @override
   void dispose() {
@@ -53,11 +69,12 @@ class _ConsumerSponsorCharityScreenState
   }
 
   List<SurplusSponsorItem> get _filteredItems {
+    final providerItems = context.watch<SponsorshipProvider>().items;
     if (_searchQuery.isEmpty) {
-      return SurplusSponsorItem.mockSurplusItems;
+      return providerItems;
     }
     final query = _searchQuery.toLowerCase();
-    return SurplusSponsorItem.mockSurplusItems.where((item) {
+    return providerItems.where((item) {
       return item.foodTitle.toLowerCase().contains(query) ||
           item.donorName.toLowerCase().contains(query) ||
           item.donorAddress.toLowerCase().contains(query);
@@ -368,38 +385,17 @@ class _ConsumerSponsorCharityScreenState
 
             // Flash Card List
             if (list.isEmpty)
-              const SliverFillRemaining(
+              SliverFillRemaining(
                 hasScrollBody: false,
                 child: Center(
-                  child: Padding(
-                    padding: EdgeInsets.all(32.0),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.search_off_rounded,
-                          size: 48,
-                          color: AppColors.textSecondary,
-                        ),
-                        SizedBox(height: 12),
-                        Text(
-                          'No surplus food items found',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                            color: AppColors.textPrimary,
-                          ),
-                        ),
-                        SizedBox(height: 4),
-                        Text(
-                          'Try another search keyword.',
-                          style: TextStyle(
-                            fontSize: 13,
-                            color: AppColors.textSecondary,
-                          ),
-                        ),
-                      ],
-                    ),
+                  child: EmptyStateWidget(
+                    icon: Icons.volunteer_activism_rounded,
+                    title: 'No Surplus Food Packages',
+                    description:
+                        'All surplus meals have currently been claimed or sponsored! Check back later as restaurants add new packages.',
+                    buttonText: 'Refresh Packages',
+                    buttonIcon: Icons.refresh_rounded,
+                    onButtonPressed: _fetchData,
                   ),
                 ),
               )
@@ -678,11 +674,11 @@ class _QuickSponsorBottomSheetState extends State<_QuickSponsorBottomSheet> {
 
   Future<void> _handleConfirm() async {
     setState(() => _isProcessing = true);
-    await Future.delayed(const Duration(milliseconds: 650));
-    if (!mounted) return;
 
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    final sponsorshipProvider = Provider.of<SponsorshipProvider>(context, listen: false);
     final user = authProvider.currentUser;
+    final token = user?.token;
     final userName = user?.displayName.isNotEmpty == true
         ? user!.displayName
         : (user?.name.isNotEmpty == true ? user!.name : 'Rojina Shrestha');
@@ -690,6 +686,20 @@ class _QuickSponsorBottomSheetState extends State<_QuickSponsorBottomSheet> {
     final dedication = _dedicationController.text.trim().isNotEmpty
         ? _dedicationController.text.trim()
         : (_isAnonymous ? 'Anonymous Sponsor' : 'Dedicated by $userName');
+    if (token != null && token.isNotEmpty) {
+      await sponsorshipProvider.createSponsorship(
+        token: token,
+        surplusItemId: widget.item.id,
+        foodTitle: widget.item.foodTitle,
+        donorName: widget.item.donorName,
+        mealsCount: _mealsCount,
+        amount: _totalPrice,
+        originalValue: widget.item.totalOriginalPrice,
+        dedication: dedication,
+      );
+    }
+
+    if (!mounted) return;
 
     final newSponsorship = {
       'id': 'SPN-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}',
@@ -1052,10 +1062,12 @@ class _MySponsorshipsHistorySheet extends StatelessWidget {
             const Divider(height: 1, color: AppColors.border),
             Expanded(
               child: sponsorships.isEmpty
-                  ? const Center(
-                      child: Text(
-                        'No sponsorships yet. Sponsor surplus food today!',
-                        style: TextStyle(color: AppColors.textSecondary),
+                  ? Center(
+                      child: EmptyStateWidget(
+                        icon: Icons.volunteer_activism_rounded,
+                        title: 'No Sponsorships Yet',
+                        description:
+                            'You haven\'t sponsored any surplus meal packages yet. Sponsoring directly funds food redirection to communities in need.',
                       ),
                     )
                   : ListView.separated(

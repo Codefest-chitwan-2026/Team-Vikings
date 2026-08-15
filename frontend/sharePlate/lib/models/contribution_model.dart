@@ -72,102 +72,78 @@ class ContributionItem {
     }
   }
 
-  static const List<ContributionItem> mockContributions = [
-    ContributionItem(
-      id: 'contrib_1',
-      title: 'Rice with curry · 10 Plate',
-      recipientName: 'Rampur Aasthaliya Org',
-      recipientCategory: 'Community Kitchen',
-      recipientAddress: 'Rampur Road, Chitwan',
-      recipientPhone: '+977 9845012345',
-      category: FoodCategory.veg,
-      plates: 10,
-      servesApprox: '15 people',
-      status: DonationStatus.completed,
-      dateAgo: '3 days ago',
-      formattedDate: 'Aug 11, 2026 at 7:30 PM',
-      pickupAddress: 'Himalayan Bistro, Ward 4, Narayangarh',
-      pickupTime: '7:45 PM',
-      deliveredTime: '8:15 PM',
-      driverVolunteer: 'Bikash Adhikari (SharePlate Volunteer)',
-      receiptNumber: 'SP-REC-2026-8812',
-      co2SavedKg: 4.8,
-      beneficiariesCount: 15,
-      description:
-          'Warm steamed basmati rice with paneer butter masala and mixed seasonal vegetable tarkari. Cleanly packaged in sealed aluminum containers.',
-      bannerGradient: [Color(0xFF1EAA55), Color(0xFF0F6B35)],
-    ),
-    ContributionItem(
-      id: 'contrib_2',
-      title: 'Bakery Box Assortment · 9 units',
-      recipientName: 'Aasha Foundation',
-      recipientCategory: 'NGO',
-      recipientAddress: 'Lazimpat, Kathmandu',
-      recipientPhone: '+977 9841234567',
-      category: FoodCategory.mixed,
-      plates: 9,
-      servesApprox: '20 children',
-      status: DonationStatus.completed,
-      dateAgo: '5 days ago',
-      formattedDate: 'Aug 09, 2026 at 6:10 PM',
-      pickupAddress: 'Sweet Delights Bakery, Lazimpat',
-      pickupTime: '6:30 PM',
-      deliveredTime: '7:00 PM',
-      driverVolunteer: 'Priya Gurung',
-      receiptNumber: 'SP-REC-2026-8794',
-      co2SavedKg: 3.5,
-      beneficiariesCount: 20,
-      description:
-          'Fresh artisanal croissants, cinnamon rolls, whole wheat muffins, and sandwich loaves from afternoon baking batch.',
-      bannerGradient: [Color(0xFFE65100), Color(0xFFB71C1C)],
-    ),
-    ContributionItem(
-      id: 'contrib_3',
-      title: 'Wedding Feast Trays · 14 Trays',
-      recipientName: 'Sneha Children Home',
-      recipientCategory: 'Orphanage',
-      recipientAddress: 'Sanepa, Lalitpur',
-      recipientPhone: '+977 9851122334',
-      category: FoodCategory.mixed,
-      plates: 14,
-      servesApprox: '45 people',
-      status: DonationStatus.completed,
-      dateAgo: '1 week ago',
-      formattedDate: 'Aug 07, 2026 at 9:00 PM',
-      pickupAddress: 'Royal Palace Banquet, Jawalakhel',
-      pickupTime: '9:30 PM',
-      deliveredTime: '10:00 PM',
-      driverVolunteer: 'Deepak Sharma',
-      receiptNumber: 'SP-REC-2026-8721',
-      co2SavedKg: 18.2,
-      beneficiariesCount: 45,
-      description:
-          'Surplus catering from evening wedding banquet. Includes pulao, dal makhani, chicken curry, naan, and gulab jamun.',
-      bannerGradient: [Color(0xFFFB8C00), Color(0xFFD84315)],
-    ),
-    ContributionItem(
-      id: 'contrib_4',
-      title: 'Vegetable Biryani Pots · 8 Pots',
-      recipientName: 'Gautam Buddha Fdn',
-      recipientCategory: 'Community Kitchen',
-      recipientAddress: 'Baluwatar, Kathmandu',
-      recipientPhone: '+977 9801987654',
-      category: FoodCategory.veg,
-      plates: 8,
-      servesApprox: '30 people',
-      status: DonationStatus.completed,
-      dateAgo: '2 weeks ago',
-      formattedDate: 'July 31, 2026 at 2:00 PM',
-      pickupAddress: 'Spice Garden, Thamel',
-      pickupTime: '2:20 PM',
-      deliveredTime: '2:50 PM',
-      driverVolunteer: 'Santosh Tamang',
-      receiptNumber: 'SP-REC-2026-8650',
-      co2SavedKg: 11.4,
-      beneficiariesCount: 30,
-      description:
-          'Aromatic Hyderabadi vegetable biryani with raita and salad. Kept in insulated hot pots ready for lunch distribution.',
-      bannerGradient: [Color(0xFF43A047), Color(0xFF1B5E20)],
-    ),
-  ];
+  factory ContributionItem.fromJson(Map<String, dynamic> json) {
+    final rawCategory = (json['category'] ?? 'VEG').toString().toUpperCase();
+    final FoodCategory cat = rawCategory.contains('NON')
+        ? FoodCategory.nonVeg
+        : (rawCategory.contains('MIX') ? FoodCategory.mixed : FoodCategory.veg);
+
+    final rawStatus = (json['status'] ?? 'COMPLETED').toString().toUpperCase();
+    DonationStatus donStatus = DonationStatus.completed;
+    if (rawStatus.contains('AWAIT') || rawStatus.contains('AVAILABLE')) {
+      donStatus = DonationStatus.awaitingClaim;
+    } else if (rawStatus.contains('ROUTE') || rawStatus.contains('PROGRESS') || rawStatus.contains('CLAIMED')) {
+      donStatus = DonationStatus.ngoEnRoute;
+    }
+
+    String formatted = 'Recently';
+    String ago = 'Recently';
+    if (json['created_at'] != null) {
+      try {
+        final d = DateTime.parse(json['created_at'].toString());
+        formatted = '${_monthName(d.month)} ${d.day}, ${d.year}';
+        final diff = DateTime.now().difference(d);
+        if (diff.inDays > 0) {
+          ago = '${diff.inDays} days ago';
+        } else if (diff.inHours > 0) {
+          ago = '${diff.inHours} hr ago';
+        } else {
+          ago = 'Just now';
+        }
+      } catch (_) {}
+    }
+
+    return ContributionItem(
+      id: (json['id'] ?? '').toString(),
+      title: json['title'] ?? 'Food Donation',
+      recipientName: json['recipient_name'] ?? 'Verified NGO',
+      recipientCategory: json['recipient_category'] ?? 'Community Kitchen',
+      recipientAddress: json['recipient_address'] ?? 'Kathmandu',
+      recipientPhone: json['recipient_phone'] ?? '',
+      category: cat,
+      plates: int.tryParse(json['plates']?.toString() ?? '10') ?? 10,
+      servesApprox: json['serves_approx'] ?? '${json['plates'] ?? 10} portions',
+      status: donStatus,
+      dateAgo: ago,
+      formattedDate: formatted,
+      pickupAddress: json['pickup_address'] ?? 'Kathmandu',
+      pickupTime: json['pickup_time'] ?? '7:00 PM',
+      deliveredTime: json['delivered_time'] ?? '7:45 PM',
+      driverVolunteer: json['driver_volunteer'] ?? 'SharePlate Volunteer',
+      receiptNumber: json['receipt_number'] ?? 'SP-REC-2026-${json['id'] ?? 1001}',
+      co2SavedKg: double.tryParse(json['co2_saved_kg']?.toString() ?? '4.8') ?? 4.8,
+      beneficiariesCount: int.tryParse(json['beneficiaries_count']?.toString() ?? '15') ?? 15,
+      description: json['description'] ?? 'Surplus meal package delivered to community shelter.',
+      bannerGradient: _getGradientForCategory(cat),
+      imagePath: json['image']?.toString(),
+    );
+  }
+
+  static String _monthName(int month) {
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    return months[month - 1];
+  }
+
+  static List<Color> _getGradientForCategory(FoodCategory cat) {
+    switch (cat) {
+      case FoodCategory.veg:
+        return const [Color(0xFF1EAA55), Color(0xFF0F6B35)];
+      case FoodCategory.nonVeg:
+        return const [Color(0xFF8E24AA), Color(0xFF4A148C)];
+      case FoodCategory.mixed:
+        return const [Color(0xFFE65100), Color(0xFFB71C1C)];
+    }
+  }
+
+  static const List<ContributionItem> mockContributions = [];
 }

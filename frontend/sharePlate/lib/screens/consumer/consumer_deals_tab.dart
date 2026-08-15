@@ -4,7 +4,8 @@ import 'package:provider/provider.dart';
 import '../../core/constants/app_colors.dart';
 import '../../models/donation_model.dart';
 import '../../providers/auth_provider.dart';
-import '../../services/donations_api_service.dart';
+import '../../providers/donation_provider.dart';
+import '../../widgets/shared/empty_state_widget.dart';
 import 'consumer_deal_detail_screen.dart';
 import 'consumer_notifications_screen.dart';
 
@@ -18,9 +19,6 @@ class ConsumerDealsTab extends StatefulWidget {
 }
 
 class _ConsumerDealsTabState extends State<ConsumerDealsTab> {
-  final DonationsApiService _apiService = DonationsApiService();
-  List<DonationItem> _flashSales = [];
-  bool _isLoading = false;
   String _searchQuery = '';
   FoodCategory? _selectedCategory;
 
@@ -28,104 +26,20 @@ class _ConsumerDealsTabState extends State<ConsumerDealsTab> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) {
-        _loadFlashSales();
-      }
+      _loadFlashSales();
     });
   }
 
   Future<void> _loadFlashSales() async {
-    if (mounted) {
-      setState(() => _isLoading = true);
-    }
     final auth = context.read<AuthProvider>();
     final token = auth.currentUser?.token;
-
     if (token != null && token.isNotEmpty) {
-      try {
-        final list = await _apiService.getFlashSales(token: token);
-        if (mounted && list.isNotEmpty) {
-          setState(() {
-            _flashSales = list
-                .whereType<Map<String, dynamic>>()
-                .map((e) => DonationItem.fromJson(e))
-                .toList();
-            _isLoading = false;
-          });
-          return;
-        }
-      } catch (_) {}
-    }
-
-    // Fallback mock flash sales if backend list is empty or offline
-    if (mounted) {
-      setState(() {
-        _flashSales = [
-          const DonationItem(
-            id: 'fs-1',
-            postedAgo: '20 min ago',
-            title: 'Assorted Gourmet Pastry Box (4 pcs)',
-            category: FoodCategory.veg,
-            quantity: 6,
-            quantityUnit: 'Boxes',
-            servesApprox: '6-8 people',
-            status: DonationStatus.awaitingClaim,
-            isActive: true,
-            pickupAddress: 'Chitwan Black Forest, Narayangarh',
-            pickupLatitude: 27.6852,
-            pickupLongitude: 85.3124,
-            pickupWindow: '45 minutes',
-            listingType: ListingType.discountedSale,
-            originalPrice: 450,
-            discountedPrice: 180,
-            description: 'Delicious chocolate eclairs, croissants, and apple pies made today.',
-          ),
-          const DonationItem(
-            id: 'fs-2',
-            postedAgo: '35 min ago',
-            title: 'Deluxe Chicken Biryani Bowl',
-            category: FoodCategory.nonVeg,
-            quantity: 8,
-            quantityUnit: 'Portions',
-            servesApprox: '8 people',
-            status: DonationStatus.awaitingClaim,
-            isActive: true,
-            pickupAddress: 'Himalayan Grill & Cafe, Bharatpur-10',
-            pickupLatitude: 27.6920,
-            pickupLongitude: 85.3210,
-            pickupWindow: '1 hour',
-            listingType: ListingType.discountedSale,
-            originalPrice: 380,
-            discountedPrice: 150,
-            description: 'Fragrant Dum Biryani served with fresh mint raita and salad.',
-          ),
-          const DonationItem(
-            id: 'fs-3',
-            postedAgo: '1 hr ago',
-            title: 'Artisan Sourdough Loaves',
-            category: FoodCategory.veg,
-            quantity: 5,
-            quantityUnit: 'Loaves',
-            servesApprox: '10 people',
-            status: DonationStatus.awaitingClaim,
-            isActive: true,
-            pickupAddress: 'Bakers Yard, Lazimpat',
-            pickupLatitude: 27.7215,
-            pickupLongitude: 85.3206,
-            pickupWindow: '30 minutes',
-            listingType: ListingType.discountedSale,
-            originalPrice: 280,
-            discountedPrice: 100,
-            description: 'Crusty organic artisan sourdough loaves baked this morning.',
-          ),
-        ];
-        _isLoading = false;
-      });
+      await context.read<DonationProvider>().fetchFlashSales(token: token);
     }
   }
 
-  List<DonationItem> get _filteredSales {
-    return _flashSales.where((item) {
+  List<DonationItem> _getFilteredSales(List<DonationItem> flashSales) {
+    return flashSales.where((item) {
       if (_selectedCategory != null && item.category != _selectedCategory) {
         return false;
       }
@@ -141,7 +55,9 @@ class _ConsumerDealsTabState extends State<ConsumerDealsTab> {
 
   @override
   Widget build(BuildContext context) {
-    final list = _filteredSales;
+    final donationProvider = context.watch<DonationProvider>();
+    final list = _getFilteredSales(donationProvider.flashSaleDonations);
+    final isLoading = donationProvider.isLoading;
 
     return SafeArea(
       child: Column(
@@ -338,13 +254,18 @@ class _ConsumerDealsTabState extends State<ConsumerDealsTab> {
 
           // Deals List
           Expanded(
-            child: _isLoading
+            child: isLoading
                 ? const Center(child: CircularProgressIndicator(color: AppColors.primaryEmerald))
                 : list.isEmpty
-                    ? const Center(
-                        child: Text(
-                          'No flash deals available right now.',
-                          style: TextStyle(color: AppColors.textSecondary),
+                    ? Center(
+                        child: EmptyStateWidget(
+                          icon: Icons.bolt_rounded,
+                          title: 'No Flash Deals Right Now',
+                          description:
+                              'Nearby restaurants and bakeries have not posted discount deals yet. Check back soon for fresh surplus food discounts!',
+                          buttonText: 'Refresh Deals',
+                          buttonIcon: Icons.refresh_rounded,
+                          onButtonPressed: _loadFlashSales,
                         ),
                       )
                     : RefreshIndicator(

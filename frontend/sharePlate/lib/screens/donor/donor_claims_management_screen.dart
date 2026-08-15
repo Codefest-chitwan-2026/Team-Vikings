@@ -1,6 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../../core/constants/app_colors.dart';
 import '../../models/donation_model.dart';
+import '../../providers/auth_provider.dart';
+import '../../providers/donation_provider.dart';
+import '../../providers/listing_flow_provider.dart';
+import '../../widgets/shared/empty_state_widget.dart';
+import 'add_donation_screen.dart';
 
 enum _ClaimSource { all, ngo, customer, completed }
 
@@ -60,54 +66,95 @@ class _DonorClaimsManagementScreenState
   @override
   void initState() {
     super.initState();
-    _claims = [
-      _IncomingClaim(
-        id: 'in-claim-1',
-        listingTitle: 'Surplus Dal Bhat & Curry Buffet Trays',
-        claimantName: 'Aasha Foundation Nepal',
-        claimantType: 'NGO',
-        claimantPhone: '9841234567',
-        quantity: 18,
-        quantityUnit: 'Trays',
-        category: FoodCategory.veg,
-        verificationCode: 'CLM-7842',
-        claimedAt: DateTime.now().subtract(const Duration(minutes: 18)),
-        pickupWindowMinutes: 45,
-        pickupNotes: 'Volunteer van en route. Collecting via back kitchen dock.',
-        status: DonorClaimStatus.awaitingPickup,
-      ),
-      _IncomingClaim(
-        id: 'in-claim-2',
-        listingTitle: 'Assorted Gourmet Pastry Box (4 pcs)',
-        claimantName: 'Rojina Shrestha',
-        claimantType: 'Customer',
-        claimantPhone: '9860123456',
-        quantity: 1,
-        quantityUnit: 'Box',
-        category: FoodCategory.veg,
-        verificationCode: 'ORD-5542',
-        amountPaid: 180,
-        claimedAt: DateTime.now().subtract(const Duration(minutes: 25)),
-        pickupWindowMinutes: 35,
-        pickupNotes: 'Paid online via Flash Sale. Collecting at cash counter.',
-        status: DonorClaimStatus.awaitingPickup,
-      ),
-      _IncomingClaim(
-        id: 'in-claim-3',
-        listingTitle: 'Fresh Wholewheat Breads & Rolls',
-        claimantName: 'Helping Hands Community Shelter',
-        claimantType: 'NGO',
-        claimantPhone: '9801987654',
-        quantity: 12,
-        quantityUnit: 'Packs',
-        category: FoodCategory.veg,
-        verificationCode: 'CLM-3319',
-        claimedAt: DateTime.now().subtract(const Duration(hours: 3)),
-        pickupWindowMinutes: 60,
-        pickupNotes: 'Collected and verified by Driver Rajesh.',
-        status: DonorClaimStatus.completed,
-      ),
-    ];
+    _claims = [];
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final auth = context.read<AuthProvider>();
+      final token = auth.currentUser?.token;
+      if (token != null && token.isNotEmpty) {
+        context.read<DonationProvider>().fetchClaims(token: token).then((_) {
+          _loadDynamicClaims();
+        });
+        context.read<DonationProvider>().fetchDonations(token: token).then((_) {
+          _loadDynamicClaims();
+        });
+      } else {
+        _loadDynamicClaims();
+      }
+    });
+  }
+
+  void _loadDynamicClaims() {
+    final donationProvider = context.read<DonationProvider>();
+    final List<_IncomingClaim> dynamicClaims = [];
+
+    // 1. Process server claims if available
+    for (final raw in donationProvider.claims) {
+      if (raw is Map<String, dynamic>) {
+        final id = (raw['id'] ?? '').toString();
+        final donationData = raw['donation'] is Map<String, dynamic> ? raw['donation'] as Map<String, dynamic> : null;
+        final title = (raw['food_title'] ?? donationData?['title'] ?? 'Surplus Food Rescue').toString();
+        final ngoName = (raw['ngo_name'] ?? raw['volunteer_name'] ?? 'Verified NGO Partner').toString();
+        final phone = (raw['volunteer_phone'] ?? raw['ngo_phone'] ?? '').toString();
+        final code = (raw['manual_code'] ?? raw['qr_code'] ?? 'CLM-$id').toString();
+        final statusStr = (raw['status'] ?? '').toString().toUpperCase();
+        final isCompleted = statusStr == 'COMPLETED' || statusStr == 'PICKED_UP';
+        final isClaimantCustomer = (raw['claimant_type'] ?? '').toString().toUpperCase() == 'CUSTOMER';
+
+        dynamicClaims.add(
+          _IncomingClaim(
+            id: id,
+            listingTitle: title,
+            claimantName: ngoName,
+            claimantType: isClaimantCustomer ? 'Customer' : 'NGO',
+            claimantPhone: phone,
+            quantity: int.tryParse(donationData?['quantity']?.toString() ?? '10') ?? 10,
+            quantityUnit: (donationData?['quantity_unit'] ?? 'Portions').toString(),
+            category: FoodCategory.veg,
+            verificationCode: code,
+            amountPaid: donationData?['discounted_price'] != null
+                ? double.tryParse(donationData!['discounted_price'].toString())
+                : null,
+            claimedAt: DateTime.tryParse(raw['created_at']?.toString() ?? '') ?? DateTime.now(),
+            pickupWindowMinutes: 45,
+            pickupNotes: raw['donor_note']?.toString() ?? 'Food rescue claim scheduled.',
+            status: isCompleted ? DonorClaimStatus.completed : DonorClaimStatus.awaitingPickup,
+          ),
+        );
+      }
+    }
+
+    // 2. Process active and past donations with claim info
+    for (final item in [...donationProvider.activeDonations, ...donationProvider.pastDonations]) {
+      if (item.recipient != null && item.recipient!.isNotEmpty) {
+        final existingIdx = dynamicClaims.indexWhere((c) => c.id == item.id);
+        if (existingIdx == -1) {
+          final isDone = item.status == DonationStatus.completed || !item.isActive;
+          dynamicClaims.add(
+            _IncomingClaim(
+              id: item.id,
+              listingTitle: item.title,
+              claimantName: item.recipient ?? 'Verified NGO Partner',
+              claimantType: item.listingType == ListingType.discountedSale ? 'Customer' : 'NGO',
+              claimantPhone: item.recipientPhone ?? '',
+              quantity: item.quantity,
+              quantityUnit: item.quantityUnit,
+              category: item.category,
+              verificationCode: item.qrCode ?? 'CLM-${item.id.hashCode.abs() % 9000 + 1000}',
+              amountPaid: item.discountedPrice,
+              claimedAt: DateTime.now().subtract(const Duration(minutes: 15)),
+              pickupWindowMinutes: 45,
+              pickupNotes: 'Claimed surplus meal pickup.',
+              status: isDone ? DonorClaimStatus.completed : DonorClaimStatus.awaitingPickup,
+            ),
+          );
+        }
+      }
+    }
+
+    setState(() {
+      _claims = dynamicClaims;
+    });
   }
 
   List<_IncomingClaim> get _filteredClaims {
@@ -126,7 +173,7 @@ class _DonorClaimsManagementScreenState
   }
 
   void _verifyAndHandover(_IncomingClaim claim) {
-    final codeController = TextEditingController();
+    final codeController = TextEditingController(text: claim.verificationCode);
 
     showDialog(
       context: context,
@@ -149,7 +196,7 @@ class _DonorClaimsManagementScreenState
             ),
             const SizedBox(height: 14),
             Text(
-              'Ask claimant for verification code (Expected: ${claim.verificationCode}):',
+              'Verification Code (Expected: ${claim.verificationCode}):',
               style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textPrimary),
             ),
             const SizedBox(height: 8),
@@ -180,20 +227,36 @@ class _DonorClaimsManagementScreenState
               backgroundColor: AppColors.primaryEmerald,
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
             ),
-            onPressed: () {
+            onPressed: () async {
               Navigator.of(ctx).pop();
+              final auth = context.read<AuthProvider>();
+              final token = auth.currentUser?.token;
+              final code = codeController.text.trim();
+
+              if (token != null && token.isNotEmpty) {
+                final listingFlow = context.read<ListingFlowProvider>();
+                await listingFlow.verifyPickupCode(
+                  token: token,
+                  manualCode: code,
+                  qrCode: code,
+                );
+              }
+
               setState(() {
                 claim.status = DonorClaimStatus.completed;
               });
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text(
-                    'Handover verified! "${claim.listingTitle}" marked as collected by ${claim.claimantName}.',
+
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      'Handover verified! "${claim.listingTitle}" marked as collected by ${claim.claimantName}.',
+                    ),
+                    backgroundColor: AppColors.success,
+                    behavior: SnackBarBehavior.floating,
                   ),
-                  backgroundColor: AppColors.success,
-                  behavior: SnackBarBehavior.floating,
-                ),
-              );
+                );
+              }
             },
             child: const Text('Confirm Handover', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
           ),
@@ -223,7 +286,6 @@ class _DonorClaimsManagementScreenState
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // Header
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
             child: Column(
@@ -282,20 +344,6 @@ class _DonorClaimsManagementScreenState
                   ],
                 ),
                 const SizedBox(height: 16),
-
-                // Quick Stats
-                // Row(
-                //   children: [
-                //     _buildStatCard('NGO Rescues', '$ngoCount active', Icons.volunteer_activism_outlined, const Color(0xFF2E7D32)),
-                //     const SizedBox(width: 10),
-                //     _buildStatCard('Flash Orders', '$customerCount active', Icons.local_offer_outlined, const Color(0xFFE65100)),
-                //     const SizedBox(width: 10),
-                //     _buildStatCard('Completed', '$completedCount total', Icons.done_all_rounded, const Color(0xFF1677D2)),
-                //   ],
-                // ),
-                const SizedBox(height: 14),
-
-                // Filter Buttons
                 Row(
                   children: [
                     _filterButton('All (${_claims.length})', _ClaimSource.all),
@@ -310,84 +358,37 @@ class _DonorClaimsManagementScreenState
               ],
             ),
           ),
-
           const SizedBox(height: 12),
-
-          // Claims List
           Expanded(
             child: claims.isEmpty
                 ? Center(
-              child: Padding(
-                padding: const EdgeInsets.all(32),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      Icons.inbox_outlined,
-                      size: 48,
-                      color: AppColors.textSecondary.withValues(alpha: 0.5),
+                    child: EmptyStateWidget(
+                      icon: Icons.receipt_long_outlined,
+                      title: 'No Claims or Pickups Yet',
+                      description:
+                          'When verified NGOs claim your surplus donations or customers reserve flash sales, their pickup details will show up here.',
+                      buttonText: 'Post Food Listing',
+                      buttonIcon: Icons.add,
+                      onButtonPressed: () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => const AddDonationScreen(),
+                          ),
+                        );
+                      },
                     ),
-                    const SizedBox(height: 12),
-                    const Text(
-                      'No claims found in this view',
-                      style: TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.textPrimary,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    const Text(
-                      'When NGOs or customers claim your surplus food listings, they will appear here.',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
-                    ),
-                  ],
-                ),
-              ),
-            )
+                  )
                 : ListView.separated(
-              padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
-              itemCount: claims.length,
-              separatorBuilder: (_, _) => const SizedBox(height: 14),
-              itemBuilder: (context, index) {
-                final claim = claims[index];
-                return _buildIncomingClaimCard(claim);
-              },
-            ),
+                    padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
+                    itemCount: claims.length,
+                    separatorBuilder: (_, _) => const SizedBox(height: 14),
+                    itemBuilder: (context, index) {
+                      final claim = claims[index];
+                      return _buildIncomingClaimCard(claim);
+                    },
+                  ),
           ),
         ],
-      ),
-    );
-  }
-
-  Widget _buildStatCard(String title, String subtitle, IconData icon, Color color) {
-    return Expanded(
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-        decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.07),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: color.withValues(alpha: 0.2)),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Icon(icon, size: 18, color: color),
-            const SizedBox(height: 6),
-            Text(
-              title,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontSize: 11, color: AppColors.textSecondary, fontWeight: FontWeight.w500),
-            ),
-            const SizedBox(height: 2),
-            Text(
-              subtitle,
-              style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: color),
-            ),
-          ],
-        ),
       ),
     );
   }
@@ -449,7 +450,6 @@ class _DonorClaimsManagementScreenState
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Header: Claimant Type Tag & Code
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -499,8 +499,6 @@ class _DonorClaimsManagementScreenState
               ],
             ),
             const SizedBox(height: 10),
-
-            // Food Title
             Text(
               claim.listingTitle,
               style: const TextStyle(
@@ -519,8 +517,6 @@ class _DonorClaimsManagementScreenState
               ),
             ),
             const SizedBox(height: 10),
-
-            // Claimant Details Box
             Container(
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
@@ -571,7 +567,6 @@ class _DonorClaimsManagementScreenState
                 ],
               ),
             ),
-
             if (isActive) ...[
               const SizedBox(height: 12),
               Row(

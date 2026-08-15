@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:http/http.dart' as http;
 import '../constants/api_constants.dart';
 import '../errors/app_exceptions.dart';
+import '../errors/error_sanitizer.dart';
 
 class ApiClient {
   final http.Client _client;
@@ -38,10 +39,10 @@ class ApiClient {
     } on SocketException catch (_) {
       throw NetworkException();
     } on TimeoutException catch (_) {
-      throw NetworkException('Request timed out. Please try again.');
+      throw NetworkException('Request timed out. Please check your internet connection.');
     } catch (e) {
       if (e is AppException) rethrow;
-      throw AppException(e.toString());
+      throw AppException(ErrorSanitizer.sanitize(e));
     }
   }
 
@@ -65,10 +66,37 @@ class ApiClient {
     } on SocketException catch (_) {
       throw NetworkException();
     } on TimeoutException catch (_) {
-      throw NetworkException('Request timed out. Please try again.');
+      throw NetworkException('Request timed out. Please check your internet connection.');
     } catch (e) {
       if (e is AppException) rethrow;
-      throw AppException(e.toString());
+      throw AppException(ErrorSanitizer.sanitize(e));
+    }
+  }
+
+  Future<dynamic> put(
+    String url, {
+    dynamic body,
+    String? token,
+    Map<String, String>? headers,
+  }) async {
+    try {
+      final uri = Uri.parse(url);
+      final encodedBody = body != null ? jsonEncode(body) : null;
+      final response = await _client
+          .put(
+            uri,
+            headers: _buildHeaders(token: token, extraHeaders: headers),
+            body: encodedBody,
+          )
+          .timeout(ApiConstants.connectTimeout);
+      return _handleResponse(response);
+    } on SocketException catch (_) {
+      throw NetworkException();
+    } on TimeoutException catch (_) {
+      throw NetworkException('Request timed out. Please check your internet connection.');
+    } catch (e) {
+      if (e is AppException) rethrow;
+      throw AppException(ErrorSanitizer.sanitize(e));
     }
   }
 
@@ -92,10 +120,10 @@ class ApiClient {
     } on SocketException catch (_) {
       throw NetworkException();
     } on TimeoutException catch (_) {
-      throw NetworkException('Request timed out. Please try again.');
+      throw NetworkException('Request timed out. Please check your internet connection.');
     } catch (e) {
       if (e is AppException) rethrow;
-      throw AppException(e.toString());
+      throw AppException(ErrorSanitizer.sanitize(e));
     }
   }
 
@@ -113,10 +141,10 @@ class ApiClient {
     } on SocketException catch (_) {
       throw NetworkException();
     } on TimeoutException catch (_) {
-      throw NetworkException('Request timed out. Please try again.');
+      throw NetworkException('Request timed out. Please check your internet connection.');
     } catch (e) {
       if (e is AppException) rethrow;
-      throw AppException(e.toString());
+      throw AppException(ErrorSanitizer.sanitize(e));
     }
   }
 
@@ -158,10 +186,10 @@ class ApiClient {
     } on SocketException catch (_) {
       throw NetworkException();
     } on TimeoutException catch (_) {
-      throw NetworkException('Request timed out. Please try again.');
+      throw NetworkException('Request timed out. Please check your internet connection.');
     } catch (e) {
       if (e is AppException) rethrow;
-      throw AppException(e.toString());
+      throw AppException(ErrorSanitizer.sanitize(e));
     }
   }
 
@@ -191,30 +219,28 @@ class ApiClient {
       return decodedData ?? {};
     }
 
-    final errorMessage = _extractErrorMessage(decodedData, statusCode);
+    final rawErrorMessage = _extractRawErrorMessage(decodedData, statusCode);
+    final sanitizedMessage = ErrorSanitizer.sanitizeRawMessage(rawErrorMessage);
 
-    if (statusCode == 401 || statusCode == 403) {
-      throw UnauthorizedException(errorMessage, statusCode);
+    if (statusCode == 401) {
+      throw UnauthorizedException(sanitizedMessage, statusCode);
+    } else if (statusCode == 403) {
+      throw ForbiddenException(sanitizedMessage, statusCode);
+    } else if (statusCode == 404) {
+      throw NotFoundException(sanitizedMessage, statusCode);
     } else if (statusCode == 400) {
-      final fieldErrors = <String, List<String>>{};
-      if (decodedData is Map<String, dynamic>) {
-        decodedData.forEach((key, value) {
-          if (value is List) {
-            fieldErrors[key] = value.map((e) => e.toString()).toList();
-          } else if (value is String) {
-            fieldErrors[key] = [value];
-          }
-        });
-      }
-      throw ValidationException(errorMessage, fieldErrors: fieldErrors, statusCode: statusCode);
+      final sanitizedFieldErrors = decodedData is Map<String, dynamic>
+          ? ErrorSanitizer.sanitizeFieldErrors(decodedData)
+          : <String, List<String>>{};
+      throw ValidationException(sanitizedMessage, fieldErrors: sanitizedFieldErrors, statusCode: statusCode);
     } else if (statusCode >= 500) {
-      throw ServerException(errorMessage, statusCode);
+      throw ServerException(sanitizedMessage, statusCode);
     } else {
-      throw AppException(errorMessage, statusCode: statusCode, details: decodedData is Map<String, dynamic> ? decodedData : null);
+      throw AppException(sanitizedMessage, statusCode: statusCode, details: decodedData is Map<String, dynamic> ? decodedData : null);
     }
   }
 
-  String _extractErrorMessage(dynamic decoded, int statusCode) {
+  String _extractRawErrorMessage(dynamic decoded, int statusCode) {
     if (decoded is Map<String, dynamic>) {
       if (decoded.containsKey('error') && decoded['error'] != null) {
         return decoded['error'].toString();
@@ -237,6 +263,6 @@ class ApiClient {
         }
       }
     }
-    return 'Request failed with status code $statusCode';
+    return 'Request failed with status $statusCode';
   }
 }

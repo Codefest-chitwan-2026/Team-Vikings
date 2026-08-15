@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/constants/app_colors.dart';
 import '../../models/notification_model.dart';
+import 'empty_state_widget.dart';
 
 class NotificationTile extends StatelessWidget {
   const NotificationTile({super.key, required this.item, this.onTap});
@@ -34,9 +35,9 @@ class NotificationTile extends StatelessWidget {
                 children: [
                   Text(
                     item.title,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 14,
-                      fontWeight: FontWeight.bold,
+                      fontWeight: item.isRead ? FontWeight.w600 : FontWeight.bold,
                       color: AppColors.textPrimary,
                     ),
                   ),
@@ -64,21 +65,25 @@ class NotificationTile extends StatelessWidget {
   }
 }
 
-/// A full "Notifications" list, including the header row and dividers
-/// between entries. Shared by every role's notification screen so the
-/// layout described in the mock-up only has to be built once.
 class NotificationListView extends StatelessWidget {
-  const NotificationListView({super.key, required this.items});
+  const NotificationListView({
+    super.key,
+    required this.items,
+    this.onItemTap,
+  });
 
   final List<NotificationItem> items;
+  final ValueChanged<NotificationItem>? onItemTap;
 
   @override
   Widget build(BuildContext context) {
     if (items.isEmpty) {
       return const Center(
-        child: Text(
-          'You have no notifications yet.',
-          style: TextStyle(color: AppColors.textSecondary),
+        child: EmptyStateWidget(
+          icon: Icons.notifications_none_rounded,
+          title: 'No Notifications Yet',
+          description:
+              'You are all caught up! Updates regarding surplus food claims, pickups, and listing status will show up here.',
         ),
       );
     }
@@ -87,7 +92,13 @@ class NotificationListView extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
       itemCount: items.length,
       separatorBuilder: (_, _) => const Divider(height: 1, color: AppColors.border),
-      itemBuilder: (context, index) => NotificationTile(item: items[index]),
+      itemBuilder: (context, index) {
+        final item = items[index];
+        return NotificationTile(
+          item: item,
+          onTap: onItemTap != null ? () => onItemTap!(item) : null,
+        );
+      },
     );
   }
 }

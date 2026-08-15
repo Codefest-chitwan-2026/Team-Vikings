@@ -7,9 +7,11 @@ import 'package:shareplate/screens/recipient/recipient_profile_screen.dart';
 import '../../core/constants/app_colors.dart';
 import '../../models/recipient_listing_model.dart';
 import '../../providers/auth_provider.dart';
+import '../../providers/donation_provider.dart';
 import '../../widgets/recipient/recipient_bottom_navigation.dart';
 import '../../widgets/recipient/recipient_listing_card.dart';
 import '../../widgets/recipient/recipient_search_and_filters.dart';
+import '../../widgets/shared/empty_state_widget.dart';
 import 'browse_nearby_tab.dart';
 import 'listing_detail_screen.dart';
 
@@ -82,8 +84,29 @@ class _RecipientHomeTabState extends State<_RecipientHomeTab> {
   bool _showFreeListings = true;
   String _query = '';
 
-  List<RecipientListing> get _filteredListings {
-    final typeFiltered = RecipientListingModel.listings.where((listing) {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _refresh();
+    });
+  }
+
+  Future<void> _refresh() async {
+    final auth = context.read<AuthProvider>();
+    final token = auth.currentUser?.token;
+    if (token != null && token.isNotEmpty) {
+      await context.read<DonationProvider>().fetchNgoPriorityListings(token: token);
+    }
+  }
+
+  List<RecipientListing> _getListings(DonationProvider provider) {
+    final serverItems = provider.ngoPriorityDonations;
+    List<RecipientListing> combined = serverItems
+        .map((item) => RecipientListing.fromDonationItem(item))
+        .toList();
+
+    final typeFiltered = combined.where((listing) {
       return _showFreeListings ? listing.isFree : !listing.isFree;
     });
 
@@ -104,168 +127,145 @@ class _RecipientHomeTabState extends State<_RecipientHomeTab> {
 
   @override
   Widget build(BuildContext context) {
-    final listings = _filteredListings;
+    final donationProvider = context.watch<DonationProvider>();
+    final listings = _getListings(donationProvider);
     final authProvider = context.watch<AuthProvider>();
     final displayName = authProvider.currentUser?.displayName ?? 'Recipient';
 
     return SafeArea(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(20, 24, 20, 0),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Hi, $displayName',
-                        style: const TextStyle(
-                          color: AppColors.textSecondary,
-                          fontSize: 14,
+      child: RefreshIndicator(
+        onRefresh: _refresh,
+        color: AppColors.primaryEmerald,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 24, 20, 0),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Hi, $displayName',
+                          style: const TextStyle(
+                            color: AppColors.textSecondary,
+                            fontSize: 14,
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 2),
-                      const Text(
-                        'You are a Recipient',
-                        style: TextStyle(
-                          color: AppColors.textPrimary,
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
+                        const SizedBox(height: 2),
+                        const Text(
+                          'You are a Recipient',
+                          style: TextStyle(
+                            color: AppColors.textPrimary,
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
-                ),
-                Material(
-                  color: AppColors.surface,
-                  shape: const CircleBorder(
-                    side: BorderSide(color: AppColors.border),
-                  ),
-                  clipBehavior: Clip.antiAlias,
-                  child: InkWell(
-                    onTap: widget.onNotificationsTap,
-                    child: const SizedBox(
-                      width: 40,
-                      height: 40,
-                      child: Icon(
-                        Icons.notifications_none_rounded,
-                        size: 22,
-                        color: AppColors.charcoal,
+                  Material(
+                    color: AppColors.surface,
+                    shape: const CircleBorder(
+                      side: BorderSide(color: AppColors.border),
+                    ),
+                    clipBehavior: Clip.antiAlias,
+                    child: InkWell(
+                      onTap: widget.onNotificationsTap,
+                      child: const SizedBox(
+                        width: 40,
+                        height: 40,
+                        child: Icon(
+                          Icons.notifications_none_rounded,
+                          size: 22,
+                          color: AppColors.charcoal,
+                        ),
                       ),
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
-          const SizedBox(height: 16),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20),
-            child: RecipientSearchBar(
-              hintText: 'Search food or donors nearby',
-              onChanged: (value) => setState(() => _query = value),
+            const SizedBox(height: 16),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: RecipientSearchBar(
+                hintText: 'Search food or donors nearby',
+                onChanged: (value) => setState(() => _query = value),
+              ),
             ),
-          ),
-          const SizedBox(height: 16),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20),
-            child: RecipientListingTypeToggle(
-              showFree: _showFreeListings,
-              onChanged: (showFree) => setState(() => _showFreeListings = showFree),
+            const SizedBox(height: 16),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: RecipientListingTypeToggle(
+                showFree: _showFreeListings,
+                onChanged: (showFree) => setState(() => _showFreeListings = showFree),
+              ),
             ),
-          ),
-          const SizedBox(height: 16),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text(
-                  'Available Right Now',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.textPrimary,
+            const SizedBox(height: 16),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text(
+                    'Available Right Now',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.textPrimary,
+                    ),
                   ),
-                ),
-                TextButton(
-                  onPressed: widget.onSeeMoreTap,
-                  style: TextButton.styleFrom(
-                    foregroundColor: const Color(0xFF1677D2),
-                    padding: EdgeInsets.zero,
-                    minimumSize: const Size(44, 28),
-                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  TextButton(
+                    onPressed: widget.onSeeMoreTap,
+                    style: TextButton.styleFrom(
+                      foregroundColor: const Color(0xFF1677D2),
+                      padding: EdgeInsets.zero,
+                      minimumSize: const Size(44, 28),
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                    child: const Text('See More', style: TextStyle(fontSize: 13)),
                   ),
-                  child: const Text('See More', style: TextStyle(fontSize: 13)),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
-          const SizedBox(height: 8),
-          Expanded(
-            child: listings.isEmpty
-                ? Center(
-              child: Padding(
-                padding: const EdgeInsets.all(32),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                      width: 64,
-                      height: 64,
-                      decoration: BoxDecoration(
-                        color: AppColors.primaryEmerald.withValues(alpha: 0.08),
-                        shape: BoxShape.circle,
-                      ),
-                      child: Icon(
-                        _showFreeListings
+            const SizedBox(height: 8),
+            Expanded(
+              child: listings.isEmpty
+                  ? Center(
+                      child: EmptyStateWidget(
+                        icon: _showFreeListings
                             ? Icons.volunteer_activism_outlined
                             : Icons.local_offer_outlined,
-                        size: 30,
-                        color: AppColors.primaryEmerald,
+                        title: _showFreeListings
+                            ? 'No Priority Food Listings Right Now'
+                            : 'No Discounted Deals Available',
+                        description: _showFreeListings
+                            ? 'Nearby food businesses haven\'t posted surplus meals at this moment. You will be notified as soon as a donor posts food.'
+                            : 'Nearby food businesses haven\'t posted flash sales right now.',
+                        buttonText: 'Refresh Listings',
+                        buttonIcon: Icons.refresh_rounded,
+                        onButtonPressed: _refresh,
                       ),
+                    )
+                  : ListView.separated(
+                      padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+                      itemCount: listings.length,
+                      separatorBuilder: (_, _) => const SizedBox(height: 12),
+                      itemBuilder: (context, index) {
+                        final listing = listings[index];
+                        return RecipientListingCard(
+                          listing: listing,
+                          onTap: () => _openListing(listing),
+                        );
+                      },
                     ),
-                    const SizedBox(height: 14),
-                    Text(
-                      _showFreeListings
-                          ? 'No free listings right now'
-                          : 'No discounted deals right now',
-                      style: const TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.textPrimary,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      _showFreeListings
-                          ? 'New free-to-claim food will show up here as soon as a donor posts it nearby.'
-                          : 'New discounted deals will show up here as soon as a donor posts one nearby.',
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
-                    ),
-                  ],
-                ),
-              ),
-            )
-                : ListView.separated(
-              padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
-              itemCount: listings.length,
-              separatorBuilder: (_, _) => const SizedBox(height: 12),
-              itemBuilder: (context, index) {
-                final listing = listings[index];
-                return RecipientListingCard(
-                  listing: listing,
-                  onTap: () => _openListing(listing),
-                );
-              },
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
