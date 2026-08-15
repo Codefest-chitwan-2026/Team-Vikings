@@ -67,8 +67,11 @@ class _ClaimVM {
     final donorName =
         (donationData['donor_name'] ?? raw['donor_name'] ?? 'Verified Food Business')
             .toString();
-    final donorPhone =
-        (donationData['donor_phone'] ?? raw['donor_phone'] ?? '').toString();
+    final donorPhone = (donationData['donor_phone'] ??
+            raw['donor_phone'] ??
+            raw['ngo_details']?['phone'] ??
+            '')
+        .toString();
     final pickupAddress =
         (donationData['pickup_address'] ?? raw['pickup_address'] ?? 'Kathmandu')
             .toString();
@@ -189,10 +192,14 @@ class _RecipientClaimedDonationsScreenState
   }
 
   /// Convert raw provider list → typed view-models, applying filter + search.
+  /// Deduplicates by claim id so the same claim never appears twice even if
+  /// the provider list contains duplicate entries.
   List<_ClaimVM> _buildFilteredList(List<dynamic> rawClaims) {
+    final seen = <String>{};
     final all = rawClaims
         .whereType<Map<String, dynamic>>()
         .map(_ClaimVM.fromRaw)
+        .where((vm) => seen.add(vm.id)) // dedup — only keep first occurrence
         .toList();
 
     return all.where((c) {
@@ -238,10 +245,12 @@ class _RecipientClaimedDonationsScreenState
     final provider = context.watch<DonationProvider>();
     final rawClaims = provider.claims;
 
-    // Build full list once for counts, filtered list for display
+    // Build full list once for counts (deduplicated), filtered list for display
+    final seenIds = <String>{};
     final allVMs = rawClaims
         .whereType<Map<String, dynamic>>()
         .map(_ClaimVM.fromRaw)
+        .where((vm) => seenIds.add(vm.id))
         .toList();
     final activeCount = allVMs.where((c) => c.isActive).length;
     final completedCount = allVMs.where((c) => !c.isActive).length;

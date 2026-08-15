@@ -61,6 +61,8 @@ class DonorClaimsManagementScreen extends StatefulWidget {
 class _DonorClaimsManagementScreenState
     extends State<DonorClaimsManagementScreen> {
   _ClaimSource _selectedFilter = _ClaimSource.all;
+  String _searchQuery = '';
+  final TextEditingController _searchController = TextEditingController();
 
   late List<_IncomingClaim> _claims;
 
@@ -83,6 +85,12 @@ class _DonorClaimsManagementScreenState
         _loadDynamicClaims();
       }
     });
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
   }
 
   void _loadDynamicClaims() {
@@ -132,6 +140,7 @@ class _DonorClaimsManagementScreenState
 
   List<_IncomingClaim> get _filteredClaims {
     return _claims.where((claim) {
+      // ── Filter tab ──────────────────────────────────────────────────
       if (_selectedFilter == _ClaimSource.ngo &&
           (!claim.isNgo || !claim.isActive)) {
         return false;
@@ -143,6 +152,17 @@ class _DonorClaimsManagementScreenState
       if (_selectedFilter == _ClaimSource.completed && claim.isActive) {
         return false;
       }
+
+      // ── Text search ─────────────────────────────────────────────────
+      if (_searchQuery.isNotEmpty) {
+        final q = _searchQuery.toLowerCase();
+        return claim.listingTitle.toLowerCase().contains(q) ||
+            claim.claimantName.toLowerCase().contains(q) ||
+            claim.verificationCode.toLowerCase().contains(q) ||
+            claim.claimantPhone.contains(q) ||
+            claim.claimantType.toLowerCase().contains(q);
+      }
+
       return true;
     }).toList();
   }
@@ -463,6 +483,39 @@ class _DonorClaimsManagementScreenState
                   ],
                 ),
                 const SizedBox(height: 16),
+
+                // ── Search bar ─────────────────────────────────────────
+                TextField(
+                  controller: _searchController,
+                  onChanged: (v) => setState(() => _searchQuery = v.trim()),
+                  decoration: InputDecoration(
+                    hintText: 'Search by food, claimant, or code…',
+                    hintStyle: const TextStyle(
+                        fontSize: 13, color: AppColors.textSecondary),
+                    prefixIcon: const Icon(Icons.search,
+                        size: 20, color: AppColors.textSecondary),
+                    suffixIcon: _searchQuery.isNotEmpty
+                        ? IconButton(
+                            icon: const Icon(Icons.clear, size: 18),
+                            onPressed: () {
+                              _searchController.clear();
+                              setState(() => _searchQuery = '');
+                            },
+                          )
+                        : null,
+                    filled: true,
+                    fillColor: const Color(0xFFF3F4F6),
+                    contentPadding: const EdgeInsets.symmetric(
+                        vertical: 0, horizontal: 16),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide.none,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+
+                // ── Filter chips ───────────────────────────────────────
                 Row(
                   children: [
                     _filterButton('All (${_claims.length})', _ClaimSource.all),
@@ -481,22 +534,36 @@ class _DonorClaimsManagementScreenState
           Expanded(
             child: claims.isEmpty
                 ? Center(
-              child: EmptyStateWidget(
-                icon: Icons.receipt_long_outlined,
-                title: 'No Claims or Pickups Yet',
-                description:
-                'When verified NGOs claim your surplus donations or customers reserve flash sales, their pickup details will show up here.',
-                buttonText: 'Post Food Listing',
-                buttonIcon: Icons.add,
-                onButtonPressed: () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => const AddDonationScreen(),
+                    child: EmptyStateWidget(
+                      icon: _searchQuery.isNotEmpty
+                          ? Icons.search_off_rounded
+                          : Icons.receipt_long_outlined,
+                      title: _searchQuery.isNotEmpty
+                          ? 'No results for "$_searchQuery"'
+                          : 'No Claims or Pickups Yet',
+                      description: _searchQuery.isNotEmpty
+                          ? 'Try different keywords — food title, claimant name, or verification code.'
+                          : 'When verified NGOs claim your surplus donations or customers reserve flash sales, their pickup details will show up here.',
+                      buttonText: _searchQuery.isNotEmpty
+                          ? 'Clear Search'
+                          : 'Post Food Listing',
+                      buttonIcon: _searchQuery.isNotEmpty
+                          ? Icons.clear
+                          : Icons.add,
+                      onButtonPressed: () {
+                        if (_searchQuery.isNotEmpty) {
+                          _searchController.clear();
+                          setState(() => _searchQuery = '');
+                        } else {
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => const AddDonationScreen(),
+                            ),
+                          );
+                        }
+                      },
                     ),
-                  );
-                },
-              ),
-            )
+                  )
                 : ListView.separated(
               padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
               itemCount: claims.length,
