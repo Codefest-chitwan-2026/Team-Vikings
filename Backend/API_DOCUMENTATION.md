@@ -89,7 +89,7 @@ Public. Lists NGO profiles. Optional query parameters: `latitude`, `longitude`, 
 Lists role-appropriate listings:
 
 - Business: its own listings
-- NGO: available donations in the NGO-priority window
+- NGO: all available donation listings
 - Customer: available flash sales
 - Staff: all listings
 

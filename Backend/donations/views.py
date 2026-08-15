@@ -86,7 +86,6 @@ class DonationViewSet(viewsets.ModelViewSet):
             base_qs = queryset.filter(
                 listing_type="DONATION",
                 status="AVAILABLE",
-                ngo_priority_expires_at__gt=timezone.now(),
             )
         else:
             base_qs = queryset.filter(
