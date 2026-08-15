@@ -418,6 +418,13 @@ class _DocumentVisualCard extends StatelessWidget {
             document.localFilePath!.toLowerCase().endsWith('.jpeg') ||
             document.localFilePath!.toLowerCase().endsWith('.png'));
 
+    final hasRemoteImage = document.photoUrl != null &&
+        document.photoUrl!.isNotEmpty &&
+        (document.type == VerificationDocumentType.image ||
+            document.photoUrl!.toLowerCase().endsWith('.jpg') ||
+            document.photoUrl!.toLowerCase().endsWith('.jpeg') ||
+            document.photoUrl!.toLowerCase().endsWith('.png'));
+
     if (hasLocalImage) {
       return Container(
         height: 220,
@@ -430,6 +437,22 @@ class _DocumentVisualCard extends StatelessWidget {
         clipBehavior: Clip.antiAlias,
         child: Image.file(
           File(document.localFilePath!),
+          fit: BoxFit.cover,
+          errorBuilder: (context, error, stackTrace) => _OfficialCertificateCard(document: document),
+        ),
+      );
+    } else if (hasRemoteImage) {
+      return Container(
+        height: 220,
+        width: double.infinity,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: AppColors.border),
+          color: const Color(0xFFF0F4F8),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: Image.network(
+          document.photoUrl!,
           fit: BoxFit.cover,
           errorBuilder: (context, error, stackTrace) => _OfficialCertificateCard(document: document),
         ),
@@ -634,6 +657,25 @@ class _FullScreenPhotoViewer extends StatelessWidget {
             document.localFilePath!.toLowerCase().endsWith('.jpeg') ||
             document.localFilePath!.toLowerCase().endsWith('.png'));
 
+    final hasRemoteImage = document.photoUrl != null &&
+        document.photoUrl!.isNotEmpty &&
+        (document.type == VerificationDocumentType.image ||
+            document.photoUrl!.toLowerCase().endsWith('.jpg') ||
+            document.photoUrl!.toLowerCase().endsWith('.jpeg') ||
+            document.photoUrl!.toLowerCase().endsWith('.png'));
+
+    Widget viewerContent;
+    if (hasLocalImage) {
+      viewerContent = Image.file(File(document.localFilePath!));
+    } else if (hasRemoteImage) {
+      viewerContent = Image.network(document.photoUrl!);
+    } else {
+      viewerContent = Padding(
+        padding: const EdgeInsets.all(20),
+        child: _OfficialCertificateCard(document: document),
+      );
+    }
+
     return Scaffold(
       backgroundColor: Colors.black,
       appBar: AppBar(
@@ -648,12 +690,7 @@ class _FullScreenPhotoViewer extends StatelessWidget {
         child: InteractiveViewer(
           minScale: 0.8,
           maxScale: 4.0,
-          child: hasLocalImage
-              ? Image.file(File(document.localFilePath!))
-              : Padding(
-                  padding: const EdgeInsets.all(20),
-                  child: _OfficialCertificateCard(document: document),
-                ),
+          child: viewerContent,
         ),
       ),
     );

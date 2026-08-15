@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/constants/app_colors.dart';
+import '../../models/donation_model.dart';
 import '../../models/recipient_listing_model.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/donation_provider.dart';
@@ -33,13 +34,14 @@ class _BrowseNearbyTabState extends State<BrowseNearbyTab> {
     final auth = context.read<AuthProvider>();
     final token = auth.currentUser?.token;
     if (token != null && token.isNotEmpty) {
-      await context.read<DonationProvider>().fetchNgoPriorityListings(token: token);
+      await context.read<DonationProvider>().fetchDonations(token: token);
     }
   }
 
   List<RecipientListing> _getFilteredListings(DonationProvider provider) {
-    final serverItems = provider.ngoPriorityDonations;
+    final serverItems = provider.activeDonations;
     final allListings = serverItems
+        .where((item) => item.listingType == ListingType.donateFree)
         .map((item) => RecipientListing.fromDonationItem(item))
         .toList();
 
@@ -62,7 +64,9 @@ class _BrowseNearbyTabState extends State<BrowseNearbyTab> {
   Widget build(BuildContext context) {
     final donationProvider = context.watch<DonationProvider>();
     final listings = _getFilteredListings(donationProvider);
-    final totalCount = donationProvider.ngoPriorityDonations.length;
+    final totalCount = donationProvider.activeDonations
+        .where((item) => item.listingType == ListingType.donateFree)
+        .length;
 
     return SafeArea(
       child: RefreshIndicator(
@@ -99,31 +103,44 @@ class _BrowseNearbyTabState extends State<BrowseNearbyTab> {
             ),
             const SizedBox(height: 12),
             Expanded(
-              child: listings.isEmpty
-                  ? Center(
-                      child: EmptyStateWidget(
-                        icon: Icons.explore_off_outlined,
-                        title: 'No Food Listings Nearby',
-                        description:
-                            'No priority surplus food listings found nearby at the moment. As businesses post donations, they will appear here.',
-                        buttonText: 'Refresh Listings',
-                        buttonIcon: Icons.refresh_rounded,
-                        onButtonPressed: _refresh,
-                      ),
+              child: donationProvider.isLoading && listings.isEmpty
+                  ? const Center(
+                      child: CircularProgressIndicator(color: AppColors.primaryEmerald),
                     )
-                  : ListView.separated(
-                      padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
-                      itemCount: listings.length,
-                      separatorBuilder: (_, _) => const SizedBox(height: 12),
-                      itemBuilder: (context, index) {
-                        final listing = listings[index];
-                        return RecipientListingCard(
-                          listing: listing,
-                          showAreaInSubtitle: false,
-                          onTap: () => _openListing(listing),
-                        );
-                      },
-                    ),
+                  : listings.isEmpty
+                      ? Center(
+                          child: donationProvider.errorMessage != null
+                              ? EmptyStateWidget(
+                                  icon: Icons.error_outline_rounded,
+                                  title: 'Couldn\'t Load Listings',
+                                  description: donationProvider.errorMessage!,
+                                  buttonText: 'Try Again',
+                                  buttonIcon: Icons.refresh_rounded,
+                                  onButtonPressed: _refresh,
+                                )
+                              : EmptyStateWidget(
+                                  icon: Icons.explore_off_outlined,
+                                  title: 'No Food Listings Nearby',
+                                  description:
+                                      'No priority surplus food listings found nearby at the moment. As businesses post donations, they will appear here.',
+                                  buttonText: 'Refresh Listings',
+                                  buttonIcon: Icons.refresh_rounded,
+                                  onButtonPressed: _refresh,
+                                ),
+                        )
+                      : ListView.separated(
+                          padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+                          itemCount: listings.length,
+                          separatorBuilder: (_, _) => const SizedBox(height: 12),
+                          itemBuilder: (context, index) {
+                            final listing = listings[index];
+                            return RecipientListingCard(
+                              listing: listing,
+                              showAreaInSubtitle: false,
+                              onTap: () => _openListing(listing),
+                            );
+                          },
+                        ),
             ),
           ],
         ),

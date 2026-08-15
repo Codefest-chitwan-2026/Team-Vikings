@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:provider/provider.dart';
 import '../../core/constants/app_colors.dart';
 import '../../models/donation_model.dart';
@@ -92,14 +93,23 @@ class _DonorClaimsManagementScreenState
     for (final raw in donationProvider.claims) {
       if (raw is Map<String, dynamic>) {
         final id = (raw['id'] ?? '').toString();
-        final donationData = raw['donation'] is Map<String, dynamic> ? raw['donation'] as Map<String, dynamic> : null;
-        final title = (raw['food_title'] ?? donationData?['title'] ?? 'Surplus Food Rescue').toString();
-        final ngoName = (raw['ngo_name'] ?? raw['volunteer_name'] ?? 'Verified NGO Partner').toString();
-        final phone = (raw['volunteer_phone'] ?? raw['ngo_phone'] ?? '').toString();
-        final code = (raw['manual_code'] ?? raw['qr_code'] ?? 'CLM-$id').toString();
+        final donationData = raw['donation'] is Map<String, dynamic>
+            ? raw['donation'] as Map<String, dynamic>
+            : null;
+        final title = (raw['food_title'] ?? donationData?['title'] ??
+            'Surplus Food Rescue').toString();
+        final ngoName = (raw['ngo_name'] ?? raw['volunteer_name'] ??
+            'Verified NGO Partner').toString();
+        final phone = (raw['volunteer_phone'] ?? raw['ngo_phone'] ?? '')
+            .toString();
+        final code = (raw['manual_code'] ?? raw['qr_code'] ?? 'CLM-$id')
+            .toString();
         final statusStr = (raw['status'] ?? '').toString().toUpperCase();
-        final isCompleted = statusStr == 'COMPLETED' || statusStr == 'PICKED_UP';
-        final isClaimantCustomer = (raw['claimant_type'] ?? '').toString().toUpperCase() == 'CUSTOMER';
+        final isCompleted = statusStr == 'COMPLETED' ||
+            statusStr == 'PICKED_UP';
+        final isClaimantCustomer = (raw['claimant_type'] ?? '')
+            .toString()
+            .toUpperCase() == 'CUSTOMER';
 
         dynamicClaims.add(
           _IncomingClaim(
@@ -108,44 +118,57 @@ class _DonorClaimsManagementScreenState
             claimantName: ngoName,
             claimantType: isClaimantCustomer ? 'Customer' : 'NGO',
             claimantPhone: phone,
-            quantity: int.tryParse(donationData?['quantity']?.toString() ?? '10') ?? 10,
-            quantityUnit: (donationData?['quantity_unit'] ?? 'Portions').toString(),
+            quantity: int.tryParse(
+                donationData?['quantity']?.toString() ?? '10') ?? 10,
+            quantityUnit: (donationData?['quantity_unit'] ?? 'Portions')
+                .toString(),
             category: FoodCategory.veg,
             verificationCode: code,
             amountPaid: donationData?['discounted_price'] != null
                 ? double.tryParse(donationData!['discounted_price'].toString())
                 : null,
-            claimedAt: DateTime.tryParse(raw['created_at']?.toString() ?? '') ?? DateTime.now(),
+            claimedAt: DateTime.tryParse(raw['created_at']?.toString() ?? '') ??
+                DateTime.now(),
             pickupWindowMinutes: 45,
-            pickupNotes: raw['donor_note']?.toString() ?? 'Food rescue claim scheduled.',
-            status: isCompleted ? DonorClaimStatus.completed : DonorClaimStatus.awaitingPickup,
+            pickupNotes: raw['donor_note']?.toString() ??
+                'Food rescue claim scheduled.',
+            status: isCompleted ? DonorClaimStatus.completed : DonorClaimStatus
+                .awaitingPickup,
           ),
         );
       }
     }
 
     // 2. Process active and past donations with claim info
-    for (final item in [...donationProvider.activeDonations, ...donationProvider.pastDonations]) {
+    for (final item in [
+      ...donationProvider.activeDonations,
+      ...donationProvider.pastDonations
+    ]) {
       if (item.recipient != null && item.recipient!.isNotEmpty) {
         final existingIdx = dynamicClaims.indexWhere((c) => c.id == item.id);
         if (existingIdx == -1) {
-          final isDone = item.status == DonationStatus.completed || !item.isActive;
+          final isDone = item.status == DonationStatus.completed ||
+              !item.isActive;
           dynamicClaims.add(
             _IncomingClaim(
               id: item.id,
               listingTitle: item.title,
               claimantName: item.recipient ?? 'Verified NGO Partner',
-              claimantType: item.listingType == ListingType.discountedSale ? 'Customer' : 'NGO',
+              claimantType: item.listingType == ListingType.discountedSale
+                  ? 'Customer'
+                  : 'NGO',
               claimantPhone: item.recipientPhone ?? '',
               quantity: item.quantity,
               quantityUnit: item.quantityUnit,
               category: item.category,
-              verificationCode: item.qrCode ?? 'CLM-${item.id.hashCode.abs() % 9000 + 1000}',
+              verificationCode: item.qrCode ??
+                  'CLM-${item.id.hashCode.abs() % 9000 + 1000}',
               amountPaid: item.discountedPrice,
               claimedAt: DateTime.now().subtract(const Duration(minutes: 15)),
               pickupWindowMinutes: 45,
               pickupNotes: 'Claimed surplus meal pickup.',
-              status: isDone ? DonorClaimStatus.completed : DonorClaimStatus.awaitingPickup,
+              status: isDone ? DonorClaimStatus.completed : DonorClaimStatus
+                  .awaitingPickup,
             ),
           );
         }
@@ -159,10 +182,12 @@ class _DonorClaimsManagementScreenState
 
   List<_IncomingClaim> get _filteredClaims {
     return _claims.where((claim) {
-      if (_selectedFilter == _ClaimSource.ngo && (!claim.isNgo || !claim.isActive)) {
+      if (_selectedFilter == _ClaimSource.ngo &&
+          (!claim.isNgo || !claim.isActive)) {
         return false;
       }
-      if (_selectedFilter == _ClaimSource.customer && (claim.isNgo || !claim.isActive)) {
+      if (_selectedFilter == _ClaimSource.customer &&
+          (claim.isNgo || !claim.isActive)) {
         return false;
       }
       if (_selectedFilter == _ClaimSource.completed && claim.isActive) {
@@ -172,99 +197,231 @@ class _DonorClaimsManagementScreenState
     }).toList();
   }
 
-  void _verifyAndHandover(_IncomingClaim claim) {
-    final codeController = TextEditingController(text: claim.verificationCode);
+  // void _verifyAndHandover(_IncomingClaim claim) {
+  //   final codeController = TextEditingController(text: claim.verificationCode);
+  //
+  //   showDialog(
+  //     context: context,
+  //     builder: (ctx) => AlertDialog(
+  //       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+  //       title: const Row(
+  //         children: [
+  //           Icon(Icons.verified_outlined, color: AppColors.primaryEmerald),
+  //           SizedBox(width: 8),
+  //           Text('Verify & Hand Over', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+  //         ],
+  //       ),
+  //       content: Column(
+  //         mainAxisSize: MainAxisSize.min,
+  //         crossAxisAlignment: CrossAxisAlignment.start,
+  //         children: [
+  //           Text(
+  //             'Handing over "${claim.listingTitle}" to ${claim.claimantName}.',
+  //             style: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
+  //           ),
+  //           const SizedBox(height: 14),
+  //           Text(
+  //             'Verification Code (Expected: ${claim.verificationCode}):',
+  //             style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textPrimary),
+  //           ),
+  //           const SizedBox(height: 8),
+  //           TextField(
+  //             controller: codeController,
+  //             textCapitalization: TextCapitalization.characters,
+  //             decoration: InputDecoration(
+  //               hintText: 'Enter code e.g. ${claim.verificationCode}',
+  //               hintStyle: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
+  //               filled: true,
+  //               fillColor: const Color(0xFFF3F4F6),
+  //               contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+  //               border: OutlineInputBorder(
+  //                 borderRadius: BorderRadius.circular(10),
+  //                 borderSide: BorderSide.none,
+  //               ),
+  //             ),
+  //           ),
+  //         ],
+  //       ),
+  //       actions: [
+  //         TextButton(
+  //           onPressed: () => Navigator.of(ctx).pop(),
+  //           child: const Text('Cancel', style: TextStyle(color: AppColors.textSecondary)),
+  //         ),
+  //         ElevatedButton(
+  //           style: ElevatedButton.styleFrom(
+  //             backgroundColor: AppColors.primaryEmerald,
+  //             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+  //           ),
+  //           onPressed: () async {
+  //             Navigator.of(ctx).pop();
+  //             final auth = context.read<AuthProvider>();
+  //             final token = auth.currentUser?.token;
+  //             final code = codeController.text.trim();
+  //
+  //             if (token != null && token.isNotEmpty) {
+  //               final listingFlow = context.read<ListingFlowProvider>();
+  //               await listingFlow.verifyPickupCode(
+  //                 token: token,
+  //                 manualCode: code,
+  //                 qrCode: code,
+  //               );
+  //             }
+  //
+  //             setState(() {
+  //               claim.status = DonorClaimStatus.completed;
+  //             });
+  //
+  //             if (mounted) {
+  //               ScaffoldMessenger.of(context).showSnackBar(
+  //                 SnackBar(
+  //                   content: Text(
+  //                     'Handover verified! "${claim.listingTitle}" marked as collected by ${claim.claimantName}.',
+  //                   ),
+  //                   backgroundColor: AppColors.success,
+  //                   behavior: SnackBarBehavior.floating,
+  //                 ),
+  //               );
+  //             }
+  //           },
+  //           child: const Text('Confirm Handover', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+  //         ),
+  //       ],
+  //     ),
+  //   );
+  // }
+
+  Future<void> _verifyAndHandover(_IncomingClaim claim) async {
+    // Open the camera directly — no intermediate dialog first.
+    final scanned = await Navigator.of(context).push<String>(
+      MaterialPageRoute(
+        builder: (_) => const _QrScanScreen(),
+        fullscreenDialog: true,
+      ),
+    );
+
+    // User backed out of the camera without scanning anything.
+    if (scanned == null) return;
+
+    if (!mounted) return;
+    _showHandoverConfirmDialog(claim, initialCode: scanned);
+  }
+
+  void _showHandoverConfirmDialog(_IncomingClaim claim, {required String initialCode}) {
+    final codeController = TextEditingController(text: initialCode);
 
     showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Row(
-          children: [
-            Icon(Icons.verified_outlined, color: AppColors.primaryEmerald),
-            SizedBox(width: 8),
-            Text('Verify & Hand Over', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-          ],
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Handing over "${claim.listingTitle}" to ${claim.claimantName}.',
-              style: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
-            ),
-            const SizedBox(height: 14),
-            Text(
-              'Verification Code (Expected: ${claim.verificationCode}):',
-              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textPrimary),
-            ),
-            const SizedBox(height: 8),
-            TextField(
-              controller: codeController,
-              textCapitalization: TextCapitalization.characters,
-              decoration: InputDecoration(
-                hintText: 'Enter code e.g. ${claim.verificationCode}',
-                hintStyle: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
-                filled: true,
-                fillColor: const Color(0xFFF3F4F6),
-                contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10),
-                  borderSide: BorderSide.none,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: const Row(
+            children: [
+              Icon(Icons.verified_outlined, color: AppColors.primaryEmerald),
+              SizedBox(width: 8),
+              Text('Verify & Hand Over', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Handing over "${claim.listingTitle}" to ${claim.claimantName}.',
+                style: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
+              ),
+              const SizedBox(height: 14),
+              Text(
+                'Scanned Code (Expected: ${claim.verificationCode}):',
+                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textPrimary),
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: codeController,
+                textCapitalization: TextCapitalization.characters,
+                decoration: InputDecoration(
+                  hintText: 'Code from scan, or enter manually',
+                  hintStyle: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
+                  filled: true,
+                  fillColor: const Color(0xFFF3F4F6),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: BorderSide.none,
+                  ),
+                  // Lets them re-scan from here too, e.g. if the first scan
+                  // picked up the wrong code or they want to try again.
+                  suffixIcon: IconButton(
+                    icon: const Icon(Icons.qr_code_scanner_rounded, color: AppColors.primaryEmerald),
+                    tooltip: 'Re-scan',
+                    onPressed: () async {
+                      FocusScope.of(ctx).unfocus();
+                      final rescanned = await Navigator.of(ctx).push<String>(
+                        MaterialPageRoute(
+                          builder: (_) => const _QrScanScreen(),
+                          fullscreenDialog: true,
+                        ),
+                      );
+                      if (rescanned != null && rescanned.isNotEmpty) {
+                        codeController.text = rescanned;
+                        codeController.selection = TextSelection.fromPosition(
+                          TextPosition(offset: codeController.text.length),
+                        );
+                        setDialogState(() {});
+                      }
+                    },
+                  ),
                 ),
               ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text('Cancel', style: TextStyle(color: AppColors.textSecondary)),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primaryEmerald,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+              onPressed: () async {
+                Navigator.of(ctx).pop();
+                final auth = context.read<AuthProvider>();
+                final token = auth.currentUser?.token;
+                final code = codeController.text.trim();
+
+                if (token != null && token.isNotEmpty) {
+                  final listingFlow = context.read<ListingFlowProvider>();
+                  await listingFlow.verifyPickupCode(
+                    token: token,
+                    manualCode: code,
+                    qrCode: code,
+                  );
+                }
+
+                setState(() {
+                  claim.status = DonorClaimStatus.completed;
+                });
+
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(
+                        'Handover verified! "${claim.listingTitle}" marked as collected by ${claim.claimantName}.',
+                      ),
+                      backgroundColor: AppColors.success,
+                      behavior: SnackBarBehavior.floating,
+                    ),
+                  );
+                }
+              },
+              child: const Text('Confirm Handover', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
             ),
           ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Cancel', style: TextStyle(color: AppColors.textSecondary)),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.primaryEmerald,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-            ),
-            onPressed: () async {
-              Navigator.of(ctx).pop();
-              final auth = context.read<AuthProvider>();
-              final token = auth.currentUser?.token;
-              final code = codeController.text.trim();
-
-              if (token != null && token.isNotEmpty) {
-                final listingFlow = context.read<ListingFlowProvider>();
-                await listingFlow.verifyPickupCode(
-                  token: token,
-                  manualCode: code,
-                  qrCode: code,
-                );
-              }
-
-              setState(() {
-                claim.status = DonorClaimStatus.completed;
-              });
-
-              if (mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text(
-                      'Handover verified! "${claim.listingTitle}" marked as collected by ${claim.claimantName}.',
-                    ),
-                    backgroundColor: AppColors.success,
-                    behavior: SnackBarBehavior.floating,
-                  ),
-                );
-              }
-            },
-            child: const Text('Confirm Handover', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-          ),
-        ],
       ),
     );
   }
-
   void _callClaimant(_IncomingClaim claim) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -362,31 +519,31 @@ class _DonorClaimsManagementScreenState
           Expanded(
             child: claims.isEmpty
                 ? Center(
-                    child: EmptyStateWidget(
-                      icon: Icons.receipt_long_outlined,
-                      title: 'No Claims or Pickups Yet',
-                      description:
-                          'When verified NGOs claim your surplus donations or customers reserve flash sales, their pickup details will show up here.',
-                      buttonText: 'Post Food Listing',
-                      buttonIcon: Icons.add,
-                      onButtonPressed: () {
-                        Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (_) => const AddDonationScreen(),
-                          ),
-                        );
-                      },
+              child: EmptyStateWidget(
+                icon: Icons.receipt_long_outlined,
+                title: 'No Claims or Pickups Yet',
+                description:
+                'When verified NGOs claim your surplus donations or customers reserve flash sales, their pickup details will show up here.',
+                buttonText: 'Post Food Listing',
+                buttonIcon: Icons.add,
+                onButtonPressed: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => const AddDonationScreen(),
                     ),
-                  )
+                  );
+                },
+              ),
+            )
                 : ListView.separated(
-                    padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
-                    itemCount: claims.length,
-                    separatorBuilder: (_, _) => const SizedBox(height: 14),
-                    itemBuilder: (context, index) {
-                      final claim = claims[index];
-                      return _buildIncomingClaimCard(claim);
-                    },
-                  ),
+              padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
+              itemCount: claims.length,
+              separatorBuilder: (_, _) => const SizedBox(height: 14),
+              itemBuilder: (context, index) {
+                final claim = claims[index];
+                return _buildIncomingClaimCard(claim);
+              },
+            ),
           ),
         ],
       ),
@@ -617,3 +774,82 @@ class _DonorClaimsManagementScreenState
     );
   }
 }
+
+  /// Minimal full-screen QR scanner. Pops with the decoded string as soon as
+  /// the first valid code is detected.
+class _QrScanScreen extends StatefulWidget {
+  const _QrScanScreen();
+
+  @override
+  State<_QrScanScreen> createState() => _QrScanScreenState();
+}
+
+class _QrScanScreenState extends State<_QrScanScreen> {
+  final MobileScannerController _controller = MobileScannerController();
+  bool _handled = false; // guards against firing multiple times per scan burst
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _onDetect(BarcodeCapture capture) {
+    if (_handled) return;
+    final barcodes = capture.barcodes;
+    if (barcodes.isEmpty) return;
+
+    final value = barcodes.first.rawValue;
+    if (value == null || value.isEmpty) return;
+
+    _handled = true;
+    Navigator.of(context).pop(value);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      appBar: AppBar(
+        backgroundColor: Colors.black,
+        foregroundColor: Colors.white,
+        title: const Text('Scan Handover QR Code'),
+        actions: [
+          IconButton(
+            icon: ValueListenableBuilder<MobileScannerState>(
+              valueListenable: _controller, // Listen to the controller notifier directly
+              builder: (context, state, child) {
+                // Read torchState safely from the emitted state snapshot
+                final isTorchOn = state.torchState == TorchState.on;
+                return Icon(
+                  isTorchOn ? Icons.flash_on : Icons.flash_off,
+                );
+              },
+            ),
+            onPressed: () => _controller.toggleTorch(),
+          ),
+        ],
+      ),
+      body: Stack(
+        children: [
+          MobileScanner(
+            controller: _controller,
+            onDetect: _onDetect,
+          ),
+          // Simple scan-frame overlay so it's clear where to aim the camera.
+          Center(
+            child: Container(
+              width: 240,
+              height: 240,
+              decoration: BoxDecoration(
+                border: Border.all(color: AppColors.primaryEmerald, width: 3),
+                borderRadius: BorderRadius.circular(16),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+

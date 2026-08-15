@@ -160,8 +160,32 @@ class AuthProvider extends ChangeNotifier {
         );
         notifyListeners();
       }
+      await fetchVerificationDocuments();
     } catch (_) {
       // Keep local state if server is temporarily unreachable
+    }
+  }
+
+  /// Fetches the user's verification documents from GET /api/profiles/documents/
+  Future<void> fetchVerificationDocuments() async {
+    final token = _currentUser?.token;
+    if (token == null || token.isEmpty) return;
+
+    try {
+      final docs = await _profileRepository.getVerificationDocuments(token: token);
+      if (docs.isNotEmpty) {
+        final role = _currentUser?.role ?? _selectedRole;
+        if (role == UserRole.ngo) {
+          _ngoDocuments.clear();
+          _ngoDocuments.addAll(docs);
+        } else {
+          _businessDocuments.clear();
+          _businessDocuments.addAll(docs);
+        }
+        notifyListeners();
+      }
+    } catch (e) {
+      debugPrint('[AuthProvider] fetchVerificationDocuments error: $e');
     }
   }
 
@@ -369,10 +393,10 @@ class AuthProvider extends ChangeNotifier {
   }
 
   /// Updates a verification document in state and syncs with backend
-  void updateVerificationDocument(
+  Future<VerificationDocumentModel?> updateVerificationDocument(
       VerificationDocumentModel updatedDoc, {
         UserRole? role,
-      }) {
+      }) async {
     final targetRole = role ?? _currentUser?.role ?? _selectedRole;
     if (targetRole == UserRole.ngo) {
       final index = _ngoDocuments.indexWhere((d) => d.id == updatedDoc.id);
@@ -392,23 +416,42 @@ class AuthProvider extends ChangeNotifier {
     notifyListeners();
 
     if (updatedDoc.localFilePath != null && _currentUser?.token != null) {
-      _profileRepository.uploadVerificationDocument(
-        token: _currentUser!.token!,
-        fields: {
-          'title': updatedDoc.title,
-          'issued_id_number': updatedDoc.issuedIdNumber ?? '',
-          'issuer_authority': updatedDoc.issuerAuthority ?? '',
-        },
-        filePath: updatedDoc.localFilePath!,
-      ).catchError((_) => updatedDoc);
+      try {
+        final serverDoc = await _profileRepository.uploadVerificationDocument(
+          token: _currentUser!.token!,
+          fields: {
+            'title': updatedDoc.title,
+            'issued_id_number': updatedDoc.issuedIdNumber ?? '',
+            'issuer_authority': updatedDoc.issuerAuthority ?? '',
+          },
+          filePath: updatedDoc.localFilePath!,
+        );
+
+        if (targetRole == UserRole.ngo) {
+          final idx = _ngoDocuments.indexWhere((d) => d.id == updatedDoc.id || d.id == serverDoc.id);
+          if (idx != -1) {
+            _ngoDocuments[idx] = serverDoc;
+          }
+        } else {
+          final idx = _businessDocuments.indexWhere((d) => d.id == updatedDoc.id || d.id == serverDoc.id);
+          if (idx != -1) {
+            _businessDocuments[idx] = serverDoc;
+          }
+        }
+        notifyListeners();
+        return serverDoc;
+      } catch (e) {
+        debugPrint('[AuthProvider] uploadVerificationDocument error: $e');
+      }
     }
+    return updatedDoc;
   }
 
   /// Adds a new verification document
-  void addVerificationDocument(
+  Future<VerificationDocumentModel?> addVerificationDocument(
       VerificationDocumentModel newDoc, {
         UserRole? role,
-      }) {
+      }) async {
     final targetRole = role ?? _currentUser?.role ?? _selectedRole;
     if (targetRole == UserRole.ngo) {
       _ngoDocuments.insert(0, newDoc);
@@ -418,16 +461,35 @@ class AuthProvider extends ChangeNotifier {
     notifyListeners();
 
     if (newDoc.localFilePath != null && _currentUser?.token != null) {
-      _profileRepository.uploadVerificationDocument(
-        token: _currentUser!.token!,
-        fields: {
-          'title': newDoc.title,
-          'issued_id_number': newDoc.issuedIdNumber ?? '',
-          'issuer_authority': newDoc.issuerAuthority ?? '',
-        },
-        filePath: newDoc.localFilePath!,
-      ).catchError((_) => newDoc);
+      try {
+        final serverDoc = await _profileRepository.uploadVerificationDocument(
+          token: _currentUser!.token!,
+          fields: {
+            'title': newDoc.title,
+            'issued_id_number': newDoc.issuedIdNumber ?? '',
+            'issuer_authority': newDoc.issuerAuthority ?? '',
+          },
+          filePath: newDoc.localFilePath!,
+        );
+
+        if (targetRole == UserRole.ngo) {
+          final idx = _ngoDocuments.indexWhere((d) => d.id == newDoc.id);
+          if (idx != -1) {
+            _ngoDocuments[idx] = serverDoc;
+          }
+        } else {
+          final idx = _businessDocuments.indexWhere((d) => d.id == newDoc.id);
+          if (idx != -1) {
+            _businessDocuments[idx] = serverDoc;
+          }
+        }
+        notifyListeners();
+        return serverDoc;
+      } catch (e) {
+        debugPrint('[AuthProvider] addVerificationDocument error: $e');
+      }
     }
+    return newDoc;
   }
 
   /// Logs out the user

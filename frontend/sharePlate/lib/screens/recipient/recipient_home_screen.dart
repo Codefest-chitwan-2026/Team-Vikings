@@ -5,6 +5,7 @@ import 'package:shareplate/screens/recipient/recipient_notifications_screen.dart
 import 'package:shareplate/screens/recipient/recipient_profile_screen.dart';
 
 import '../../core/constants/app_colors.dart';
+import '../../models/donation_model.dart';
 import '../../models/recipient_listing_model.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/donation_provider.dart';
@@ -81,7 +82,6 @@ class _RecipientHomeTab extends StatefulWidget {
 }
 
 class _RecipientHomeTabState extends State<_RecipientHomeTab> {
-  bool _showFreeListings = true;
   String _query = '';
 
   @override
@@ -96,22 +96,19 @@ class _RecipientHomeTabState extends State<_RecipientHomeTab> {
     final auth = context.read<AuthProvider>();
     final token = auth.currentUser?.token;
     if (token != null && token.isNotEmpty) {
-      await context.read<DonationProvider>().fetchNgoPriorityListings(token: token);
+      await context.read<DonationProvider>().fetchDonations(token: token);
     }
   }
 
   List<RecipientListing> _getListings(DonationProvider provider) {
-    final serverItems = provider.ngoPriorityDonations;
-    List<RecipientListing> combined = serverItems
+    final serverItems = provider.activeDonations;
+    final freeItems = serverItems
+        .where((item) => item.listingType == ListingType.donateFree)
         .map((item) => RecipientListing.fromDonationItem(item))
         .toList();
 
-    final typeFiltered = combined.where((listing) {
-      return _showFreeListings ? listing.isFree : !listing.isFree;
-    });
-
     return RecipientListingModel.filter(
-      typeFiltered.toList(),
+      freeItems,
       filter: RecipientListingFilter.remaining,
       query: _query,
     );
@@ -157,7 +154,7 @@ class _RecipientHomeTabState extends State<_RecipientHomeTab> {
                         ),
                         const SizedBox(height: 2),
                         const Text(
-                          'You are a Recipient',
+                          'Free Food Rescues',
                           style: TextStyle(
                             color: AppColors.textPrimary,
                             fontSize: 20,
@@ -193,16 +190,8 @@ class _RecipientHomeTabState extends State<_RecipientHomeTab> {
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20),
               child: RecipientSearchBar(
-                hintText: 'Search food or donors nearby',
+                hintText: 'Search free food or donors nearby',
                 onChanged: (value) => setState(() => _query = value),
-              ),
-            ),
-            const SizedBox(height: 16),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              child: RecipientListingTypeToggle(
-                showFree: _showFreeListings,
-                onChanged: (showFree) => setState(() => _showFreeListings = showFree),
               ),
             ),
             const SizedBox(height: 16),
@@ -211,13 +200,33 @@ class _RecipientHomeTabState extends State<_RecipientHomeTab> {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text(
-                    'Available Right Now',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.textPrimary,
-                    ),
+                  Row(
+                    children: [
+                      const Text(
+                        'Available Right Now',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.textPrimary,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: AppColors.primaryEmerald.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Text(
+                          '${listings.length} free',
+                          style: const TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                            color: AppColors.primaryEmerald,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                   TextButton(
                     onPressed: widget.onSeeMoreTap,
@@ -234,35 +243,43 @@ class _RecipientHomeTabState extends State<_RecipientHomeTab> {
             ),
             const SizedBox(height: 8),
             Expanded(
-              child: listings.isEmpty
-                  ? Center(
-                      child: EmptyStateWidget(
-                        icon: _showFreeListings
-                            ? Icons.volunteer_activism_outlined
-                            : Icons.local_offer_outlined,
-                        title: _showFreeListings
-                            ? 'No Priority Food Listings Right Now'
-                            : 'No Discounted Deals Available',
-                        description: _showFreeListings
-                            ? 'Nearby food businesses haven\'t posted surplus meals at this moment. You will be notified as soon as a donor posts food.'
-                            : 'Nearby food businesses haven\'t posted flash sales right now.',
-                        buttonText: 'Refresh Listings',
-                        buttonIcon: Icons.refresh_rounded,
-                        onButtonPressed: _refresh,
-                      ),
+              child: donationProvider.isLoading && listings.isEmpty
+                  ? const Center(
+                      child: CircularProgressIndicator(color: AppColors.primaryEmerald),
                     )
-                  : ListView.separated(
-                      padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
-                      itemCount: listings.length,
-                      separatorBuilder: (_, _) => const SizedBox(height: 12),
-                      itemBuilder: (context, index) {
-                        final listing = listings[index];
-                        return RecipientListingCard(
-                          listing: listing,
-                          onTap: () => _openListing(listing),
-                        );
-                      },
-                    ),
+                  : listings.isEmpty
+                      ? Center(
+                          child: donationProvider.errorMessage != null
+                              ? EmptyStateWidget(
+                                  icon: Icons.error_outline_rounded,
+                                  title: 'Couldn\'t Load Listings',
+                                  description: donationProvider.errorMessage!,
+                                  buttonText: 'Try Again',
+                                  buttonIcon: Icons.refresh_rounded,
+                                  onButtonPressed: _refresh,
+                                )
+                              : EmptyStateWidget(
+                                  icon: Icons.volunteer_activism_outlined,
+                                  title: 'No Priority Food Listings Right Now',
+                                  description:
+                                      'Nearby food businesses haven\'t posted free surplus meals at this moment. You will be notified as soon as a donor posts food.',
+                                  buttonText: 'Refresh Listings',
+                                  buttonIcon: Icons.refresh_rounded,
+                                  onButtonPressed: _refresh,
+                                ),
+                        )
+                      : ListView.separated(
+                          padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+                          itemCount: listings.length,
+                          separatorBuilder: (_, _) => const SizedBox(height: 12),
+                          itemBuilder: (context, index) {
+                            final listing = listings[index];
+                            return RecipientListingCard(
+                              listing: listing,
+                              onTap: () => _openListing(listing),
+                            );
+                          },
+                        ),
             ),
           ],
         ),
