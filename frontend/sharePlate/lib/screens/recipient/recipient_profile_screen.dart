@@ -15,23 +15,14 @@ import 'recipient_notification_settings_screen.dart';
 class RecipientProfileScreen extends StatelessWidget {
   const RecipientProfileScreen({super.key});
 
-  void _showComingSoon(BuildContext context, String feature) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('$feature coming soon.'),
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
-  }
-
   void _openVerificationDocuments(BuildContext context, AuthProvider auth) {
     final docs = auth.getDocumentsForRole(UserRole.ngo);
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => VerificationDocumentsScreen(
-          title: 'Verification documents',
+          title: 'Verification document',
           subtitle:
-              'Documents submitted to verify your organization. Verified status enables food rescue claiming.',
+              'Official document submitted to verify your organization. Verified status enables food rescue claiming.',
           documents: docs,
           role: UserRole.ngo,
         ),
@@ -88,15 +79,8 @@ class RecipientProfileScreen extends StatelessWidget {
 
           ProfileMenuTile(
             icon: Icons.verified_user_outlined,
-            label: 'Verification documents',
+            label: 'Verification document',
             onTap: () => _openVerificationDocuments(context, authProvider),
-          ),
-          const Divider(height: 1, color: AppColors.border),
-
-          ProfileMenuTile(
-            icon: Icons.location_on_outlined,
-            label: 'Saved addresses',
-            onTap: () => _showComingSoon(context, 'Saved addresses'),
           ),
           const Divider(height: 1, color: AppColors.border),
 

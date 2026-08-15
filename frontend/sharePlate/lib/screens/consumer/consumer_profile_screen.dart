@@ -68,13 +68,6 @@ class ConsumerProfileScreen extends StatelessWidget {
           const Divider(height: 1, color: AppColors.border),
 
           ProfileMenuTile(
-            icon: Icons.location_on_outlined,
-            label: 'Saved addresses',
-            onTap: () => _showComingSoon(context, 'Saved addresses'),
-          ),
-          const Divider(height: 1, color: AppColors.border),
-
-          ProfileMenuTile(
             icon: Icons.credit_card_outlined,
             label: 'Payment methods',
             onTap: () => _showComingSoon(context, 'Payment methods'),

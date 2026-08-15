@@ -1,41 +1,12 @@
 import 'package:flutter/material.dart';
 import '../../core/constants/app_colors.dart';
 import '../../models/contribution_model.dart';
-import '../../models/donation_model.dart';
 import 'add_donation_screen.dart';
-import 'donation_receipt_screen.dart';
 
 class ContributionDetailScreen extends StatelessWidget {
   final ContributionItem contribution;
 
   const ContributionDetailScreen({super.key, required this.contribution});
-
-  void _onViewReceipt(BuildContext context) {
-    final donationEquivalent = DonationItem(
-      id: contribution.id,
-      postedAgo: contribution.dateAgo,
-      title: contribution.title,
-      category: contribution.category,
-      quantity: contribution.plates,
-      quantityUnit: 'Plates',
-      servesApprox: contribution.servesApprox,
-      status: contribution.status,
-      isActive: false,
-      recipient: contribution.recipientName,
-      recipientPhone: contribution.recipientPhone,
-      recipientAddress: contribution.recipientAddress,
-      pickupAddress: contribution.pickupAddress,
-      receiptNumber: contribution.receiptNumber,
-      completedDate: contribution.formattedDate,
-      description: contribution.description,
-    );
-
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => DonationReceiptScreen(donation: donationEquivalent),
-      ),
-    );
-  }
 
   void _onRepeatContribution(BuildContext context) {
     Navigator.of(context).push(
@@ -70,13 +41,6 @@ class ContributionDetailScreen extends StatelessWidget {
             color: AppColors.textPrimary,
           ),
         ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.receipt_long_outlined, color: AppColors.primaryEmerald),
-            tooltip: 'View Receipt',
-            onPressed: () => _onViewReceipt(context),
-          ),
-        ],
       ),
       body: SafeArea(
         child: ListView(
@@ -172,15 +136,6 @@ class ContributionDetailScreen extends StatelessWidget {
                     label: 'People Fed',
                     value: '${contribution.beneficiariesCount}',
                     color: const Color(0xFF1976D2),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: _MetricCard(
-                    icon: Icons.eco_outlined,
-                    label: 'CO2 Saved',
-                    value: '${contribution.co2SavedKg} kg',
-                    color: const Color(0xFF388E3C),
                   ),
                 ),
               ],
@@ -288,10 +243,6 @@ class ContributionDetailScreen extends StatelessWidget {
                   _DetailRow(label: 'Pickup Location', value: contribution.pickupAddress),
                   const SizedBox(height: 8),
                   _DetailRow(label: 'Completed On', value: contribution.formattedDate),
-                  const SizedBox(height: 8),
-                  _DetailRow(label: 'Delivered By', value: contribution.driverVolunteer),
-                  const SizedBox(height: 8),
-                  _DetailRow(label: 'Receipt Number', value: contribution.receiptNumber),
                 ],
               ),
             ),
@@ -299,37 +250,20 @@ class ContributionDetailScreen extends StatelessWidget {
             const SizedBox(height: 24),
 
             // Actions
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: () => _onViewReceipt(context),
-                    icon: const Icon(Icons.receipt_long, size: 18),
-                    label: const Text('View Receipt'),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: AppColors.textPrimary,
-                      side: const BorderSide(color: AppColors.border),
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                    ),
-                  ),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: () => _onRepeatContribution(context),
+                icon: const Icon(Icons.replay_rounded, size: 18),
+                label: const Text('Repeat Listing'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primaryEmerald,
+                  foregroundColor: Colors.white,
+                  elevation: 0,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: () => _onRepeatContribution(context),
-                    icon: const Icon(Icons.replay_rounded, size: 18),
-                    label: const Text('Repeat Listing'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.primaryEmerald,
-                      foregroundColor: Colors.white,
-                      elevation: 0,
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                    ),
-                  ),
-                ),
-              ],
+              ),
             ),
           ],
         ),

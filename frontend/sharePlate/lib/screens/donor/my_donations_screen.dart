@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../../../core/constants/app_colors.dart';
 import '../../../models/donation_model.dart';
+import '../../../providers/auth_provider.dart';
 import '../../../providers/donation_provider.dart';
 import '../../../screens/donor/add_donation_screen.dart';
 import '../../../screens/donor/track_donation_screen.dart';
@@ -20,6 +21,22 @@ class MyDonationsScreen extends StatefulWidget {
 
 class _MyDonationsScreenState extends State<MyDonationsScreen> {
   int _selectedTab = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _refreshDonations();
+    });
+  }
+
+  Future<void> _refreshDonations() async {
+    final auth = context.read<AuthProvider>();
+    final token = auth.currentUser?.token;
+    if (token != null && token.isNotEmpty) {
+      await context.read<DonationProvider>().fetchDonations(token: token);
+    }
+  }
 
   void _handleAction(DonationItem donation, DonationCardAction action) {
     switch (action) {
@@ -92,7 +109,11 @@ class _MyDonationsScreenState extends State<MyDonationsScreen> {
             ),
             onPressed: () {
               Navigator.of(ctx).pop();
-              context.read<DonationProvider>().cancelDonation(donation.id);
+              final auth = context.read<AuthProvider>();
+              context.read<DonationProvider>().cancelDonationOnApi(
+                token: auth.currentUser?.token,
+                donationId: donation.id,
+              );
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(
                   content: Text('Donation listing cancelled.'),
@@ -147,48 +168,57 @@ class _MyDonationsScreenState extends State<MyDonationsScreen> {
               ),
             ),
             Expanded(
-              child: visibleDonations.isEmpty
-                  ? Center(
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
+              child: RefreshIndicator(
+                onRefresh: _refreshDonations,
+                color: AppColors.primaryEmerald,
+                child: visibleDonations.isEmpty
+                    ? ListView(
                         children: [
-                          Icon(Icons.inventory_2_outlined, size: 54, color: AppColors.textSecondary.withValues(alpha: 0.4)),
-                          const SizedBox(height: 12),
-                          Text(
-                            _selectedTab == 0 ? 'No active donations right now' : 'No past donation history',
-                            style: const TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                              color: AppColors.textPrimary,
+                          SizedBox(height: MediaQuery.sizeOf(context).height * 0.2),
+                          Center(
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.inventory_2_outlined, size: 54, color: AppColors.textSecondary.withValues(alpha: 0.4)),
+                                const SizedBox(height: 12),
+                                Text(
+                                  _selectedTab == 0 ? 'No active donations right now' : 'No past donation history',
+                                  style: const TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.bold,
+                                    color: AppColors.textPrimary,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                const Text(
+                                  'Tap the + button below to post surplus meals.',
+                                  style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
+                                ),
+                              ],
                             ),
                           ),
-                          const SizedBox(height: 4),
-                          const Text(
-                            'Tap the + button below to post surplus meals.',
-                            style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
-                          ),
                         ],
+                      )
+                    : ListView.separated(
+                        padding: const EdgeInsets.fromLTRB(20, 16, 20, 100),
+                        itemCount: visibleDonations.length,
+                        separatorBuilder: (context, index) => const SizedBox(height: 12),
+                        itemBuilder: (context, index) {
+                          final donation = visibleDonations[index];
+                          return DonationCard(
+                            donation: donation,
+                            onCardTap: () {
+                              Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (_) => DonationDetailScreen(donation: donation),
+                                ),
+                              );
+                            },
+                            onActionTap: (action) => _handleAction(donation, action),
+                          );
+                        },
                       ),
-                    )
-                  : ListView.separated(
-                      padding: const EdgeInsets.fromLTRB(20, 16, 20, 100),
-                      itemCount: visibleDonations.length,
-                      separatorBuilder: (context, index) => const SizedBox(height: 12),
-                      itemBuilder: (context, index) {
-                        final donation = visibleDonations[index];
-                        return DonationCard(
-                          donation: donation,
-                          onCardTap: () {
-                            Navigator.of(context).push(
-                              MaterialPageRoute(
-                                builder: (_) => DonationDetailScreen(donation: donation),
-                              ),
-                            );
-                          },
-                          onActionTap: (action) => _handleAction(donation, action),
-                        );
-                      },
-                    ),
+              ),
             ),
           ],
         ),

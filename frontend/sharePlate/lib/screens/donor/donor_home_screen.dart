@@ -3,16 +3,17 @@ import 'package:provider/provider.dart';
 
 import '../../core/constants/app_colors.dart';
 import '../../models/contribution_model.dart';
-import '../../models/nearby_ngo_model.dart';
 import '../../providers/donation_provider.dart';
 import '../../widgets/donor/donor_bottom_navigation.dart';
 import 'contribution_detail_screen.dart';
 import 'contribution_list_screen.dart';
+import 'donor_claims_management_screen.dart';
 import 'donor_notifications_screen.dart';
 import 'donor_profile_screen.dart';
 import 'my_donations_screen.dart';
 import 'nearby_ngos_list_screen.dart';
 import 'ngo_detail_screen.dart';
+import '../../models/nearby_ngo_model.dart' as ngo_model;
 
 class DonorHomeScreen extends StatefulWidget {
   const DonorHomeScreen({super.key, this.initialTab = 0});
@@ -36,6 +37,12 @@ class _DonorHomeScreenState extends State<DonorHomeScreen> {
     setState(() => _selectedTab = index);
   }
 
+  void _openNotifications() {
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const DonorNotificationsScreen()),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -44,7 +51,7 @@ class _DonorHomeScreenState extends State<DonorHomeScreen> {
         index: _selectedTab,
         children: [
           _DonorHomeTab(
-            onNotificationsTap: () => _onTabSelected(2),
+            onNotificationsTap: _openNotifications,
             onViewAllContributions: () {
               Navigator.of(context).push(
                 MaterialPageRoute(builder: (_) => const ContributionListScreen()),
@@ -57,7 +64,7 @@ class _DonorHomeScreenState extends State<DonorHomeScreen> {
             },
           ),
           const MyDonationsScreen(),
-          const DonorNotificationsScreen(),
+          const DonorClaimsManagementScreen(),
           const DonorProfileScreen(),
         ],
       ),
@@ -88,8 +95,8 @@ class _DonorHomeTab extends StatelessWidget {
         : ContributionItem.mockContributions.first;
 
     final ngos = donationProvider.nearbyNgos;
-    final firstNgo = ngos.isNotEmpty ? ngos[0] : NearbyNgo.mockNgos[0];
-    final secondNgo = ngos.length > 1 ? ngos[1] : NearbyNgo.mockNgos[1];
+    final firstNgo = ngos.isNotEmpty ? ngos[0] : ngo_model.NearbyNgo.mockNgos[0];
+    final secondNgo = ngos.length > 1 ? ngos[1] : ngo_model.NearbyNgo.mockNgos[1];
 
     return SafeArea(
       child: LayoutBuilder(
@@ -112,7 +119,7 @@ class _DonorHomeTab extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       Expanded(
-                        flex: 4,
+                        flex: 2,
                         child: _CampaignCard(
                           onViewMore: onViewNearbyNgos,
                         ),
@@ -125,7 +132,7 @@ class _DonorHomeTab extends StatelessWidget {
                       ),
                       const SizedBox(height: 8),
                       Expanded(
-                        flex: 3,
+                        flex: 2,
                         child: _ContributionCard(
                           contribution: recentContribution,
                           onTap: () {
@@ -147,7 +154,7 @@ class _DonorHomeTab extends StatelessWidget {
                       ),
                       const SizedBox(height: 8),
                       Expanded(
-                        flex: 3,
+                        flex: 2,
                         child: Row(
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
@@ -157,7 +164,7 @@ class _DonorHomeTab extends StatelessWidget {
                                 onTap: () {
                                   Navigator.of(context).push(
                                     MaterialPageRoute(
-                                      builder: (_) => NgoDetailScreen(ngo: firstNgo),
+                                      builder: (_) => const NgoDetailScreen(),
                                     ),
                                   );
                                 },
@@ -170,7 +177,7 @@ class _DonorHomeTab extends StatelessWidget {
                                 onTap: () {
                                   Navigator.of(context).push(
                                     MaterialPageRoute(
-                                      builder: (_) => NgoDetailScreen(ngo: secondNgo),
+                                      builder: (_) => const NgoDetailScreen(),
                                     ),
                                   );
                                 },
@@ -459,7 +466,7 @@ class _StatusChip extends StatelessWidget {
 class _NearbyNgoCard extends StatelessWidget {
   const _NearbyNgoCard({required this.ngo, required this.onTap});
 
-  final NearbyNgo ngo;
+  final ngo_model.NearbyNgo ngo;
   final VoidCallback onTap;
 
   @override

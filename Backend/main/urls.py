@@ -10,7 +10,7 @@ urlpatterns = [
     path("api/auth/", include("authentication.urls")),
     path("api/", include("donations.urls")),
     path("api/", include("listing_flow.urls")),
-    # path("api/profiles/", include("profiles.urls")),
+    path("api/profiles/", include("profiles.urls")),
 ]
 
 if settings.DEBUG:

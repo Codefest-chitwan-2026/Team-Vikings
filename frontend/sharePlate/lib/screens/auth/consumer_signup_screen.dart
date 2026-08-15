@@ -6,6 +6,7 @@ import '../../providers/auth_provider.dart';
 import '../../widgets/login_screen/primary_button.dart';
 import '../../widgets/shared/custom_text_field.dart';
 import '../consumer/consumer_home_screen.dart';
+import '../shared/login_screen.dart';
 
 class ConsumerSignUpScreen extends StatefulWidget {
   const ConsumerSignUpScreen({super.key});
@@ -63,10 +64,14 @@ class _ConsumerSignUpScreenState extends State<ConsumerSignUpScreen> {
     if (!mounted) return;
 
     if (success) {
-      Navigator.of(context).pushAndRemoveUntil(
-        MaterialPageRoute(builder: (_) => const ConsumerHomeScreen()),
-        (route) => false,
-      );
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          Navigator.of(context).pushAndRemoveUntil(
+            MaterialPageRoute(builder: (_) => const ConsumerHomeScreen()),
+            (route) => false,
+          );
+        }
+      });
     } else {
       final error = authProvider.errorMessage ?? 'Registration failed. Please check your details.';
       setState(() {
@@ -115,7 +120,7 @@ class _ConsumerSignUpScreenState extends State<ConsumerSignUpScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final authProvider = context.watch<AuthProvider>();
+    final isLoading = context.select<AuthProvider, bool>((a) => a.isLoading);
 
     return Scaffold(
       backgroundColor: AppColors.white,
@@ -128,7 +133,16 @@ class _ConsumerSignUpScreenState extends State<ConsumerSignUpScreen> {
             color: AppColors.charcoal,
             size: 20,
           ),
-          onPressed: () => Navigator.of(context).maybePop(),
+          tooltip: 'Back',
+          onPressed: () {
+            if (Navigator.of(context).canPop()) {
+              Navigator.of(context).pop();
+            } else {
+              Navigator.of(context).pushReplacement(
+                MaterialPageRoute(builder: (_) => const LoginScreen()),
+              );
+            }
+          },
         ),
         title: const Text(
           'Create consumer account',
@@ -263,9 +277,40 @@ class _ConsumerSignUpScreenState extends State<ConsumerSignUpScreen> {
               const SizedBox(height: 32),
               PrimaryButton(
                 text: 'Create account',
-                isLoading: authProvider.isLoading,
+                isLoading: isLoading,
                 onPressed: _createAccount,
               ),
+              const SizedBox(height: 20),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Text(
+                    'Already have an account? ',
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                  GestureDetector(
+                    onTap: () {
+                      Navigator.of(context).pushAndRemoveUntil(
+                        MaterialPageRoute(builder: (_) => const LoginScreen()),
+                        (route) => false,
+                      );
+                    },
+                    child: const Text(
+                      'Log in',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.primaryEmerald,
+                        decoration: TextDecoration.underline,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
             ],
           ),
         ),

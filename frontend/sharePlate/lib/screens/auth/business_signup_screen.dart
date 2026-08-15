@@ -13,6 +13,7 @@ import '../../widgets/business_signup/business_verification_notice.dart';
 import '../../widgets/login_screen/primary_button.dart';
 import '../../widgets/shared/custom_text_field.dart';
 import '../donor/donor_home_screen.dart';
+import '../shared/login_screen.dart';
 import '../shared/map_address_picker_screen.dart';
 
 class BusinessSignUpScreen extends StatefulWidget {
@@ -26,7 +27,6 @@ class _BusinessSignUpScreenState extends State<BusinessSignUpScreen> {
   final _formKey = GlobalKey<FormState>();
   final _businessModel = BusinessRegistrationModel();
   final _businessNameController = TextEditingController();
-  final _contactNameController = TextEditingController();
   final _phoneController = TextEditingController();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
@@ -37,7 +37,6 @@ class _BusinessSignUpScreenState extends State<BusinessSignUpScreen> {
   String? _documentDisplayName;
 
   String? _businessNameError;
-  String? _contactNameError;
   String? _phoneError;
   String? _emailError;
   String? _passwordError;
@@ -50,7 +49,6 @@ class _BusinessSignUpScreenState extends State<BusinessSignUpScreen> {
   @override
   void dispose() {
     _businessNameController.dispose();
-    _contactNameController.dispose();
     _phoneController.dispose();
     _emailController.dispose();
     _passwordController.dispose();
@@ -87,7 +85,6 @@ class _BusinessSignUpScreenState extends State<BusinessSignUpScreen> {
     FocusScope.of(context).unfocus();
     setState(() {
       _businessNameError = null;
-      _contactNameError = null;
       _phoneError = null;
       _emailError = null;
       _passwordError = null;
@@ -123,10 +120,14 @@ class _BusinessSignUpScreenState extends State<BusinessSignUpScreen> {
     if (!mounted) return;
 
     if (success) {
-      Navigator.of(context).pushAndRemoveUntil(
-        MaterialPageRoute(builder: (_) => const DonorHomeScreen()),
-        (route) => false,
-      );
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          Navigator.of(context).pushAndRemoveUntil(
+            MaterialPageRoute(builder: (_) => const DonorHomeScreen()),
+            (route) => false,
+          );
+        }
+      });
     } else {
       final error = authProvider.errorMessage ?? 'Registration failed. Please check your details.';
       setState(() {
@@ -151,7 +152,6 @@ class _BusinessSignUpScreenState extends State<BusinessSignUpScreen> {
   void _saveFormData() {
     _businessModel
       ..businessName = _businessNameController.text.trim()
-      ..contactName = _contactNameController.text.trim()
       ..phoneNumber = _phoneController.text.trim()
       ..email = _emailController.text.trim()
       ..password = _passwordController.text
@@ -205,7 +205,7 @@ class _BusinessSignUpScreenState extends State<BusinessSignUpScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final authProvider = context.watch<AuthProvider>();
+    final isLoading = context.select<AuthProvider, bool>((a) => a.isLoading);
 
     return Scaffold(
       backgroundColor: AppColors.white,
@@ -218,7 +218,16 @@ class _BusinessSignUpScreenState extends State<BusinessSignUpScreen> {
             color: AppColors.charcoal,
             size: 20,
           ),
-          onPressed: () => Navigator.of(context).maybePop(),
+          tooltip: 'Back',
+          onPressed: () {
+            if (Navigator.of(context).canPop()) {
+              Navigator.of(context).pop();
+            } else {
+              Navigator.of(context).pushReplacement(
+                MaterialPageRoute(builder: (_) => const LoginScreen()),
+              );
+            }
+          },
         ),
         title: const Text(
           'Business verification',
@@ -286,17 +295,6 @@ class _BusinessSignUpScreenState extends State<BusinessSignUpScreen> {
                   if (_businessNameError != null) setState(() => _businessNameError = null);
                 },
                 validator: (value) => _required(value, 'business name'),
-              ),
-              const SizedBox(height: 16),
-              CustomTextField(
-                label: 'Contact person name',
-                hintText: 'Full name',
-                controller: _contactNameController,
-                errorText: _contactNameError,
-                onChanged: (_) {
-                  if (_contactNameError != null) setState(() => _contactNameError = null);
-                },
-                validator: (value) => _required(value, 'contact person name'),
               ),
               const SizedBox(height: 16),
               CustomTextField(
@@ -414,9 +412,40 @@ class _BusinessSignUpScreenState extends State<BusinessSignUpScreen> {
               const SizedBox(height: 28),
               PrimaryButton(
                 text: 'Submit for review',
-                isLoading: authProvider.isLoading,
+                isLoading: isLoading,
                 onPressed: _submitForReview,
               ),
+              const SizedBox(height: 20),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Text(
+                    'Already have an account? ',
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                  GestureDetector(
+                    onTap: () {
+                      Navigator.of(context).pushAndRemoveUntil(
+                        MaterialPageRoute(builder: (_) => const LoginScreen()),
+                        (route) => false,
+                      );
+                    },
+                    child: const Text(
+                      'Log in',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.primaryEmerald,
+                        decoration: TextDecoration.underline,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
             ],
           ),
         ),

@@ -15,13 +15,26 @@ class ConsumerBottomNavigation extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     const destinations = [
-      _NavigationDestination(icon: Icons.home_outlined, label: 'Home'),
-      _NavigationDestination(icon: Icons.local_offer_outlined, label: 'Deals'),
       _NavigationDestination(
-        icon: Icons.notifications_none_rounded,
-        label: 'Notification',
+        icon: Icons.home_outlined,
+        activeIcon: Icons.home_rounded,
+        label: 'Home',
       ),
-      _NavigationDestination(icon: Icons.person_outline_rounded, label: 'Profile'),
+      _NavigationDestination(
+        icon: Icons.volunteer_activism_outlined,
+        activeIcon: Icons.volunteer_activism_rounded,
+        label: 'Sponsor Food',
+      ),
+      _NavigationDestination(
+        icon: Icons.receipt_long_outlined,
+        activeIcon: Icons.receipt_long_rounded,
+        label: 'Orders',
+      ),
+      _NavigationDestination(
+        icon: Icons.person_outline_rounded,
+        activeIcon: Icons.person_rounded,
+        label: 'Profile',
+      ),
     ];
 
     return SafeArea(
@@ -43,8 +56,8 @@ class ConsumerBottomNavigation extends StatelessWidget {
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     Icon(
-                      destination.icon,
-                      size: 20,
+                      isSelected ? destination.activeIcon : destination.icon,
+                      size: 22,
                       color: isSelected
                           ? AppColors.primaryEmerald
                           : AppColors.textSecondary,
@@ -53,7 +66,8 @@ class ConsumerBottomNavigation extends StatelessWidget {
                     Text(
                       destination.label,
                       style: TextStyle(
-                        fontSize: 9,
+                        fontSize: 10,
+                        fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
                         color: isSelected
                             ? AppColors.primaryEmerald
                             : AppColors.textSecondary,
@@ -71,8 +85,13 @@ class ConsumerBottomNavigation extends StatelessWidget {
 }
 
 class _NavigationDestination {
-  const _NavigationDestination({required this.icon, required this.label});
+  const _NavigationDestination({
+    required this.icon,
+    required this.activeIcon,
+    required this.label,
+  });
 
   final IconData icon;
+  final IconData activeIcon;
   final String label;
 }

@@ -86,42 +86,10 @@ class _VerificationDocumentsScreenState
     );
   }
 
-  Future<void> _addNewDocument() async {
-    final result = await FilePicker.platform.pickFiles(
-      type: FileType.custom,
-      allowedExtensions: ['jpg', 'jpeg', 'png', 'pdf'],
-      allowMultiple: false,
-    );
-
-    if (!mounted || result == null || result.files.isEmpty) return;
-
-    final picked = result.files.single;
-    final isPdf = picked.name.toLowerCase().endsWith('.pdf');
-
-    final newDoc = VerificationDocumentModel(
-      id: 'doc-${DateTime.now().millisecondsSinceEpoch}',
-      title: 'Additional Supporting Document',
-      fileName: picked.name,
-      type: isPdf ? VerificationDocumentType.pdf : VerificationDocumentType.image,
-      status: VerificationDocumentStatus.pending,
-      submittedOn: DateTime.now(),
-      localFilePath: picked.path,
-      issuerAuthority: 'Uploaded by Organization',
-    );
-
-    _onDocumentUpdated(newDoc);
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Added "${picked.name}" successfully!'),
-        backgroundColor: AppColors.success,
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
+    final doc = _documentList.isNotEmpty ? _documentList.first : null;
+
     return Scaffold(
       backgroundColor: AppColors.white,
       appBar: SimpleAppBar(title: widget.title),
@@ -135,40 +103,74 @@ class _VerificationDocumentsScreenState
               style: const TextStyle(color: AppColors.textSecondary, height: 1.4, fontSize: 13),
             ),
             const SizedBox(height: 20),
-            if (_documentList.isEmpty)
+            if (doc == null)
               _EmptyState(subtitle: widget.subtitle)
-            else
-              for (final document in _documentList)
-                VerificationDocumentCard(
-                  document: document,
-                  onChangeTap: () => _openQuickChange(document),
-                  onTap: () => Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => DocumentPreviewScreen(
-                        document: document,
-                        onDocumentUpdated: _onDocumentUpdated,
-                      ),
+            else ...[
+              VerificationDocumentCard(
+                document: doc,
+                onChangeTap: () => _openQuickChange(doc),
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => DocumentPreviewScreen(
+                      document: doc,
+                      onDocumentUpdated: _onDocumentUpdated,
                     ),
                   ),
                 ),
-            const SizedBox(height: 16),
-            OutlinedButton.icon(
-              onPressed: _addNewDocument,
-              style: OutlinedButton.styleFrom(
-                minimumSize: const Size.fromHeight(48),
-                side: const BorderSide(color: AppColors.primaryEmerald),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
               ),
-              icon: const Icon(Icons.add_photo_alternate_outlined, color: AppColors.primaryEmerald, size: 20),
-              label: const Text(
-                'Upload Additional Document / Photo',
-                style: TextStyle(
-                  color: AppColors.primaryEmerald,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 13,
-                ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: () => Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => DocumentPreviewScreen(
+                            document: doc,
+                            onDocumentUpdated: _onDocumentUpdated,
+                          ),
+                        ),
+                      ),
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        side: const BorderSide(color: AppColors.primaryEmerald),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                      icon: const Icon(Icons.visibility_outlined, color: AppColors.primaryEmerald, size: 18),
+                      label: const Text(
+                        'Preview Document',
+                        style: TextStyle(
+                          color: AppColors.primaryEmerald,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: () => _openQuickChange(doc),
+                      style: ElevatedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        backgroundColor: AppColors.primaryEmerald,
+                        elevation: 0,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                      icon: const Icon(Icons.upload_file_rounded, color: Colors.white, size: 18),
+                      label: const Text(
+                        'Change Document',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
               ),
-            ),
+            ],
           ],
         ),
       ),

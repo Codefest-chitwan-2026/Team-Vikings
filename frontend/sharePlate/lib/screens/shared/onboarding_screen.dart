@@ -32,9 +32,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     },
     {
       'step': 'Step 3 of 3',
-      'title': 'Flash sales for\nconsumers',
+      'title': 'Quality meals &\nsponsor charity',
       'description':
-      'Unclaimed items transition into affordable flash sales for nearby consumers to purchase and pick up.',
+      'Unclaimed items transition into affordable flash sales for nearby consumers to purchase and pick up. You can also sponsor charity donations to support NGOs.',
       'badgeTitle': '50% Off Flash Sale',
       'badgeSub': 'Bawarchi → Local Community',
     },

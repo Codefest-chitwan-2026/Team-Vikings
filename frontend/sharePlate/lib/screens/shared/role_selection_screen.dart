@@ -6,6 +6,7 @@ import '../../widgets/role_selection/role_card.dart';
 import '../auth/business_signup_screen.dart';
 import '../auth/consumer_signup_screen.dart';
 import '../auth/ngo_signup_screen.dart';
+import 'login_screen.dart';
 
 class RoleSelectionScreen extends StatefulWidget {
   const RoleSelectionScreen({super.key});
@@ -52,24 +53,52 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.surface,
+      appBar: AppBar(
+        backgroundColor: AppColors.surface,
+        elevation: 0,
+        leading: IconButton(
+          icon: const Icon(
+            Icons.arrow_back_ios_new,
+            color: AppColors.charcoal,
+            size: 20,
+          ),
+          tooltip: 'Back to login',
+          onPressed: () {
+            if (Navigator.of(context).canPop()) {
+              Navigator.of(context).pop();
+            } else {
+              Navigator.of(context).pushReplacement(
+                MaterialPageRoute(builder: (_) => const LoginScreen()),
+              );
+            }
+          },
+        ),
+        title: const Text(
+          'Select account type',
+          style: TextStyle(
+            color: AppColors.charcoal,
+            fontWeight: FontWeight.bold,
+            fontSize: 18,
+          ),
+        ),
+      ),
       body: SafeArea(
+        top: false,
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 16.0),
+          padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 12.0),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const SizedBox(height: 20),
-
               const Text(
                 'Who are you?',
                 style: TextStyle(
-                  fontSize: 28,
+                  fontSize: 26,
                   fontWeight: FontWeight.w900,
                   color: AppColors.textPrimary,
                 ),
               ),
 
-              const SizedBox(height: 8),
+              const SizedBox(height: 6),
 
               const Text(
                 'Pick a role — you can add another later from your profile.',
@@ -80,7 +109,7 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen> {
                 ),
               ),
 
-              const SizedBox(height: 28),
+              const SizedBox(height: 20),
 
               // Modular Role Cards
               Expanded(
@@ -110,12 +139,12 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen> {
                       role: UserRole.consumer,
                       title: 'Consumer',
                       subtitle:
-                          'Grab quality meals nearby at flash-sale prices before they expire.',
+                          'Grab quality meals nearby at flash-sale prices before they expire while helping provide food to people in need.',
                       icon: Icons.shopping_bag_outlined,
                       isSelected: _selectedRole == UserRole.consumer,
                       onTap: () => setState(() => _selectedRole = UserRole.consumer),
                     ),
-                    const SizedBox(height: 24),
+                    const SizedBox(height: 20),
 
                     // Modular Info Banner Widget
                     const InfoBanner(
@@ -125,6 +154,8 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen> {
                   ],
                 ),
               ),
+
+              const SizedBox(height: 12),
 
               // Action Button
               SizedBox(
@@ -149,6 +180,43 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen> {
                   ),
                 ),
               ),
+
+              const SizedBox(height: 16),
+
+              // Back to Login Link
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Text(
+                    'Already have an account? ',
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                  GestureDetector(
+                    onTap: () {
+                      if (Navigator.of(context).canPop()) {
+                        Navigator.of(context).pop();
+                      } else {
+                        Navigator.of(context).pushReplacement(
+                          MaterialPageRoute(builder: (_) => const LoginScreen()),
+                        );
+                      }
+                    },
+                    child: const Text(
+                      'Log in',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.primaryEmerald,
+                        decoration: TextDecoration.underline,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
             ],
           ),
         ),

@@ -17,7 +17,7 @@ class DonorBottomNavigation extends StatelessWidget {
     const destinations = [
       _NavigationDestination(icon: Icons.home_outlined, label: 'Home'),
       _NavigationDestination(icon: Icons.inventory_2_outlined, label: 'Donation'),
-      _NavigationDestination(icon: Icons.notifications_none_rounded, label: 'Notification'),
+      _NavigationDestination(icon: Icons.swap_horiz_rounded, label: 'Claims'),
       _NavigationDestination(icon: Icons.person_outline_rounded, label: 'Profile'),
     ];
 
