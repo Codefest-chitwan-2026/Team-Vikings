@@ -34,6 +34,7 @@ class _ClaimedDonation {
   final int pickupWindowMinutes;
   final String description;
   final String instructions;
+  final String? qrCode;
   ClaimStatus status;
 
   _ClaimedDonation({
@@ -52,6 +53,7 @@ class _ClaimedDonation {
     required this.pickupWindowMinutes,
     required this.description,
     required this.instructions,
+    this.qrCode,
     this.status = ClaimStatus.readyForPickup,
   });
 
@@ -93,14 +95,27 @@ class _RecipientClaimedDonationsScreenState
     for (final raw in donationProvider.claims) {
       if (raw is Map<String, dynamic>) {
         final id = (raw['id'] ?? '').toString();
-        final donationData = raw['donation'] is Map<String, dynamic> ? raw['donation'] as Map<String, dynamic> : null;
-        final title = (raw['food_title'] ?? donationData?['title'] ?? 'Rescued Surplus Food').toString();
+        final donationData = raw['donation_details'] is Map<String, dynamic>
+            ? raw['donation_details'] as Map<String, dynamic>
+            : (raw['donation'] is Map<String, dynamic> ? raw['donation'] as Map<String, dynamic> : null);
+
+        final title = (donationData?['title'] ?? raw['food_title'] ?? 'Rescued Surplus Food').toString();
         final donorName = (donationData?['donor_name'] ?? raw['donor_name'] ?? 'Verified Food Business').toString();
         final donorPhone = (donationData?['donor_phone'] ?? raw['donor_phone'] ?? '').toString();
         final pickupAddress = (donationData?['pickup_address'] ?? raw['pickup_address'] ?? 'Kathmandu').toString();
-        final code = (raw['manual_code'] ?? raw['qr_code'] ?? 'CLM-$id').toString();
+
+        final ticketMap = raw['pickup_ticket'] is Map<String, dynamic> ? raw['pickup_ticket'] as Map<String, dynamic> : null;
+        final qrCode = ticketMap?['qr_code']?.toString() ?? raw['qr_code']?.toString();
+        final code = raw['manual_code']?.toString() ?? qrCode ?? 'CLM-$id';
+
         final statusStr = (raw['status'] ?? '').toString().toUpperCase();
-        final isCompleted = statusStr == 'COMPLETED' || statusStr == 'PICKED_UP';
+        final isTicketVerified = ticketMap?['is_verified'] == true;
+        final isCompleted = isTicketVerified || statusStr == 'COMPLETED' || statusStr == 'PICKED_UP';
+
+        final foodTypeStr = (donationData?['food_type'] ?? '').toString().toUpperCase();
+        final cat = foodTypeStr.contains('NON')
+            ? FoodCategory.nonVeg
+            : (foodTypeStr.contains('MIX') ? FoodCategory.mixed : FoodCategory.veg);
 
         dynamicClaims.add(
           _ClaimedDonation(
@@ -112,10 +127,11 @@ class _RecipientClaimedDonationsScreenState
             area: pickupAddress.split(',').first.trim(),
             distanceKm: double.tryParse(donationData?['distance_km']?.toString() ?? '1.2') ?? 1.2,
             quantity: int.tryParse(donationData?['quantity']?.toString() ?? '10') ?? 10,
-            quantityUnit: (donationData?['quantity_unit'] ?? 'Portions').toString(),
-            category: FoodCategory.veg,
+            quantityUnit: (donationData?['quantity_unit'] ?? 'Plates').toString(),
+            category: cat,
             claimCode: code,
-            claimedAt: DateTime.tryParse(raw['created_at']?.toString() ?? '') ?? DateTime.now(),
+            qrCode: qrCode,
+            claimedAt: DateTime.tryParse(raw['claimed_at']?.toString() ?? raw['created_at']?.toString() ?? '') ?? DateTime.now(),
             pickupWindowMinutes: 45,
             description: donationData?['description']?.toString() ?? 'Verified surplus food rescue.',
             instructions: 'Show your Claim Code $code upon arrival for contactless verification.',
@@ -141,161 +157,243 @@ class _RecipientClaimedDonationsScreenState
       if (_searchQuery.isNotEmpty) {
         final query = _searchQuery.toLowerCase();
         return claim.title.toLowerCase().contains(query) ||
-            claim.donorName.toLowerCase().contains(query);
+            claim.donorName.toLowerCase().contains(query) ||
+            claim.claimCode.toLowerCase().contains(query);
       }
       return true;
     }).toList();
   }
 
-  void _confirmPickup(_ClaimedDonation claim) {
+  void _showPickupQrDialog(_ClaimedDonation claim) {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Row(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        contentPadding: const EdgeInsets.fromLTRB(24, 20, 24, 24),
+        title: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Icon(Icons.check_circle_outline_rounded,
-                color: AppColors.primaryEmerald),
-            SizedBox(width: 8),
-            Text('Confirm Pickup', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            const Text(
+              'Pickup Ticket',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            IconButton(
+              icon: const Icon(Icons.close, size: 20),
+              onPressed: () => Navigator.of(ctx).pop(),
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(),
+            ),
           ],
         ),
-        content: Text(
-          'Have you successfully collected ${claim.quantity} ${claim.quantityUnit.toLowerCase()} of "${claim.title}" from ${claim.donorName}?',
-          style: const TextStyle(fontSize: 14, color: AppColors.textSecondary, height: 1.4),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Not Yet', style: TextStyle(color: AppColors.textSecondary)),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.primaryEmerald,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF8FAFC),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: AppColors.border),
+              ),
+              child: Column(
+                children: [
+                  Container(
+                    width: 140,
+                    height: 140,
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: AppColors.border),
+                    ),
+                    alignment: Alignment.center,
+                    child: const Icon(
+                      Icons.qr_code_2_rounded,
+                      size: 110,
+                      color: AppColors.charcoal,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  const Text(
+                    'VERIFICATION CODE',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 1.1,
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  SelectableText(
+                    claim.claimCode,
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.primaryEmerald,
+                      letterSpacing: 0.8,
+                    ),
+                  ),
+                ],
+              ),
             ),
-            onPressed: () {
-              Navigator.of(ctx).pop();
-              setState(() {
-                claim.status = ClaimStatus.completed;
-              });
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text('Marked "${claim.title}" as collected. Great rescue!'),
-                  backgroundColor: AppColors.success,
-                  behavior: SnackBarBehavior.floating,
-                ),
-              );
-            },
-            child: const Text('Yes, Picked Up', style: TextStyle(color: Colors.white)),
-          ),
-        ],
+            const SizedBox(height: 16),
+            Text(
+              claim.title,
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 4),
+            Text(
+              '${claim.quantity} ${claim.quantityUnit} · from ${claim.donorName}',
+              style: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: const Color(0xFFE8F5E9),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Row(
+                children: [
+                  Icon(Icons.info_outline_rounded, size: 16, color: AppColors.primaryEmerald),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Present this ticket code or QR to the donor store for verification upon arrival.',
+                      style: TextStyle(fontSize: 11, color: Color(0xFF1B5E20), height: 1.3),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
 
   void _callDonor(_ClaimedDonation claim) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Calling ${claim.donorName} at ${claim.donorPhone}…'),
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
+    if (claim.donorPhone.isNotEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Calling ${claim.donorName} at ${claim.donorPhone}…'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Contact info for ${claim.donorName}: Please visit ${claim.pickupAddress}'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
   }
 
   @override
   Widget build(BuildContext context) {
+    final donationProvider = context.watch<DonationProvider>();
     final claims = _filteredClaims;
     final activeCount = _claims.where((c) => c.isActive).length;
     final completedCount = _claims.where((c) => !c.isActive).length;
 
     return SafeArea(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          // Header
-          Padding(
-            padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Claimed Donations',
-                  style: TextStyle(
-                    fontSize: 22,
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.textPrimary,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                const Text(
-                  'Track active food pickups & distribution',
-                  style: TextStyle(
-                    fontSize: 13,
-                    color: AppColors.textSecondary,
-                  ),
-                ),
-                const SizedBox(height: 16),
-
-                // Search Bar
-                TextField(
-                  onChanged: (v) => setState(() => _searchQuery = v),
-                  decoration: InputDecoration(
-                    hintText: 'Search by food or donor...',
-                    hintStyle: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
-                    prefixIcon: const Icon(Icons.search, size: 20, color: AppColors.textSecondary),
-                    filled: true,
-                    fillColor: const Color(0xFFF3F4F6),
-                    contentPadding: const EdgeInsets.symmetric(vertical: 0, horizontal: 16),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: BorderSide.none,
+      child: RefreshIndicator(
+        onRefresh: _fetchClaims,
+        color: AppColors.primaryEmerald,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // Header
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Claimed Donations',
+                    style: TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.textPrimary,
                     ),
                   ),
-                ),
-                const SizedBox(height: 12),
+                  const SizedBox(height: 2),
+                  const Text(
+                    'Track active food pickups & distribution',
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
 
-                // Filter Tabs
-                Row(
-                  children: [
-                    _filterButton('All (${_claims.length})', _ClaimFilter.all),
-                    const SizedBox(width: 8),
-                    _filterButton('Ready for Pickup ($activeCount)', _ClaimFilter.active),
-                    const SizedBox(width: 8),
-                    _filterButton('Completed ($completedCount)', _ClaimFilter.completed),
-                  ],
-                ),
-              ],
+                  // Search Bar
+                  TextField(
+                    onChanged: (v) => setState(() => _searchQuery = v),
+                    decoration: InputDecoration(
+                      hintText: 'Search by food, donor, or claim code...',
+                      hintStyle: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
+                      prefixIcon: const Icon(Icons.search, size: 20, color: AppColors.textSecondary),
+                      filled: true,
+                      fillColor: const Color(0xFFF3F4F6),
+                      contentPadding: const EdgeInsets.symmetric(vertical: 0, horizontal: 16),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide.none,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+
+                  // Filter Tabs
+                  Row(
+                    children: [
+                      _filterButton('All (${_claims.length})', _ClaimFilter.all),
+                      const SizedBox(width: 8),
+                      _filterButton('Ready for Pickup ($activeCount)', _ClaimFilter.active),
+                      const SizedBox(width: 8),
+                      _filterButton('Completed ($completedCount)', _ClaimFilter.completed),
+                    ],
+                  ),
+                ],
+              ),
             ),
-          ),
 
-          const SizedBox(height: 12),
+            const SizedBox(height: 12),
 
-          // Claims List
-          Expanded(
-            child: claims.isEmpty
-                ? Center(
-                    child: EmptyStateWidget(
-                      icon: Icons.volunteer_activism_outlined,
-                      title: 'No Claimed Food Donations',
-                      description:
-                          'Your organization has not claimed any surplus food donations yet. Browse priority listings to claim meals for your community.',
-                      buttonText: 'Refresh Claims',
-                      buttonIcon: Icons.refresh_rounded,
-                      onButtonPressed: _fetchClaims,
-                    ),
-                  )
-                : ListView.separated(
-                    padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
-                    itemCount: claims.length,
-                    separatorBuilder: (_, _) => const SizedBox(height: 14),
-                    itemBuilder: (context, index) {
-                      final claim = claims[index];
-                      return _buildClaimCard(claim);
-                    },
-                  ),
-          ),
-        ],
+            // Claims List
+            Expanded(
+              child: donationProvider.isLoading && _claims.isEmpty
+                  ? const Center(
+                      child: CircularProgressIndicator(color: AppColors.primaryEmerald),
+                    )
+                  : claims.isEmpty
+                      ? Center(
+                          child: EmptyStateWidget(
+                            icon: Icons.volunteer_activism_outlined,
+                            title: 'No Claimed Food Donations',
+                            description:
+                                'Your organization has not claimed any surplus food donations yet. Browse priority listings to claim meals for your community.',
+                            buttonText: 'Refresh Claims',
+                            buttonIcon: Icons.refresh_rounded,
+                            onButtonPressed: _fetchClaims,
+                          ),
+                        )
+                      : ListView.separated(
+                          padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
+                          itemCount: claims.length,
+                          separatorBuilder: (_, _) => const SizedBox(height: 14),
+                          itemBuilder: (context, index) {
+                            final claim = claims[index];
+                            return _buildClaimCard(claim);
+                          },
+                        ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -333,221 +431,244 @@ class _RecipientClaimedDonationsScreenState
   Widget _buildClaimCard(_ClaimedDonation claim) {
     final isActive = claim.isActive;
 
-    return Container(
-      decoration: BoxDecoration(
-        color: AppColors.surface,
+    return Material(
+      color: AppColors.surface,
+      borderRadius: BorderRadius.circular(16),
+      child: InkWell(
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: isActive
-              ? AppColors.primaryEmerald.withValues(alpha: 0.35)
-              : AppColors.border,
-          width: isActive ? 1.2 : 1.0,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.03),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
+        onTap: () => _showPickupQrDialog(claim),
+        child: Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: isActive
+                  ? AppColors.primaryEmerald.withValues(alpha: 0.35)
+                  : AppColors.border,
+              width: isActive ? 1.2 : 1.0,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.03),
+                blurRadius: 8,
+                offset: const Offset(0, 2),
+              ),
+            ],
           ),
-        ],
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Status Row
-            Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: isActive
-                        ? const Color(0xFFE4F6E9)
-                        : const Color(0xFFF1F5F9),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        isActive
-                            ? Icons.hourglass_top_rounded
-                            : Icons.check_circle_rounded,
-                        size: 13,
-                        color: isActive
-                            ? const Color(0xFF2E7D32)
-                            : AppColors.textSecondary,
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Status Row & Claim Code
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF1F5F9),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Text(
+                      '${claim.claimCode.substring(0, 10)}..',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.charcoal,
+                        letterSpacing: 0.4,
                       ),
-                      const SizedBox(width: 4),
-                      Text(
-                        isActive ? 'Ready for Pickup' : 'Completed',
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: isActive
+                          ? const Color(0xFFE4F6E9)
+                          : const Color(0xFFF1F5F9),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          isActive
+                              ? Icons.hourglass_top_rounded
+                              : Icons.check_circle_rounded,
+                          size: 13,
                           color: isActive
                               ? const Color(0xFF2E7D32)
                               : AppColors.textSecondary,
                         ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-
-            // Food Title & Quantity
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        claim.title,
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          color: AppColors.textPrimary,
+                        const SizedBox(width: 4),
+                        Text(
+                          isActive ? 'Ready for Pickup' : 'Completed',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                            color: isActive
+                                ? const Color(0xFF2E7D32)
+                                : AppColors.textSecondary,
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 3),
-                      Text(
-                        '${claim.quantity} ${claim.quantityUnit} · ${claim.category.label}',
-                        style: const TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                          color: AppColors.primaryEmerald,
-                        ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 10),
-
-            // Donor & Location
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: const Color(0xFFF8FAFC),
-                borderRadius: BorderRadius.circular(10),
+                ],
               ),
-              child: Column(
+              const SizedBox(height: 12),
+
+              // Food Title & Quantity
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
-                    children: [
-                      const Icon(Icons.storefront_outlined,
-                          size: 16, color: AppColors.textSecondary),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          claim.donorName,
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          claim.title,
                           style: const TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
                             color: AppColors.textPrimary,
                           ),
                         ),
-                      ),
-                      Text(
-                        '${claim.distanceKm.toStringAsFixed(1)} km away',
-                        style: const TextStyle(
-                          fontSize: 12,
-                          color: AppColors.textSecondary,
+                        const SizedBox(height: 3),
+                        Text(
+                          '${claim.quantity} ${claim.quantityUnit} · ${claim.category.label}',
+                          style: const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.primaryEmerald,
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
-                  const SizedBox(height: 6),
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Icon(Icons.location_on_outlined,
-                          size: 16, color: AppColors.textSecondary),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          claim.pickupAddress,
+                ],
+              ),
+              const SizedBox(height: 10),
+
+              // Donor & Location
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF8FAFC),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Column(
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(Icons.storefront_outlined,
+                            size: 16, color: AppColors.textSecondary),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            claim.donorName,
+                            style: const TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.textPrimary,
+                            ),
+                          ),
+                        ),
+                        Text(
+                          '${claim.distanceKm.toStringAsFixed(1)} km away',
                           style: const TextStyle(
                             fontSize: 12,
                             color: AppColors.textSecondary,
                           ),
                         ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-
-            if (isActive) ...[
-              const SizedBox(height: 10),
-              // Pickup Window
-              Row(
-                children: [
-                  const Icon(Icons.timer_outlined, size: 15, color: Color(0xFFE65100)),
-                  const SizedBox(width: 6),
-                  Text(
-                    'Pickup window: ${claim.pickupWindowMinutes} mins remaining',
-                    style: const TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: Color(0xFFE65100),
+                      ],
                     ),
-                  ),
-                ],
+                    const SizedBox(height: 6),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Icon(Icons.location_on_outlined,
+                            size: 16, color: AppColors.textSecondary),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            claim.pickupAddress,
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: AppColors.textSecondary,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
               ),
-              const SizedBox(height: 14),
 
-              // Action Buttons
-              Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: () => _callDonor(claim),
-                      style: OutlinedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 10),
-                        side: const BorderSide(color: AppColors.border),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10),
+              if (isActive) ...[
+                const SizedBox(height: 10),
+                // Pickup Window
+                Row(
+                  children: [
+                    const Icon(Icons.timer_outlined, size: 15, color: Color(0xFFE65100)),
+                    const SizedBox(width: 6),
+                    Text(
+                      'Pickup window: ${claim.pickupWindowMinutes} mins remaining',
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: Color(0xFFE65100),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 14),
+
+                // Action Buttons
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: () => _callDonor(claim),
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 10),
+                          side: const BorderSide(color: AppColors.border),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                        ),
+                        icon: const Icon(Icons.phone_outlined, size: 16, color: AppColors.charcoal),
+                        label: const Text(
+                          'Call',
+                          style: TextStyle(fontSize: 12, color: AppColors.charcoal, fontWeight: FontWeight.w600),
                         ),
                       ),
-                      icon: const Icon(Icons.phone_outlined, size: 16, color: AppColors.charcoal),
-                      label: const Text(
-                        'Call',
-                        style: TextStyle(fontSize: 12, color: AppColors.charcoal, fontWeight: FontWeight.w600),
-                      ),
                     ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    flex: 2,
-                    child: ElevatedButton.icon(
-                      onPressed: () => _confirmPickup(claim),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.primaryEmerald,
-                        padding: const EdgeInsets.symmetric(vertical: 10),
-                        elevation: 0,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      flex: 2,
+                      child: ElevatedButton.icon(
+                        onPressed: () => _showPickupQrDialog(claim),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.primaryEmerald,
+                          padding: const EdgeInsets.symmetric(vertical: 10),
+                          elevation: 0,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                        ),
+                        icon: const Icon(Icons.qr_code_rounded, size: 16, color: Colors.white),
+                        label: const Text(
+                          'Show Pickup QR',
+                          style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white),
                         ),
                       ),
-                      icon: const Icon(Icons.check_rounded, size: 16, color: Colors.white),
-                      label: const Text(
-                        'Confirm Pickup',
-                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white),
-                      ),
                     ),
-                  ),
-                ],
-              ),
+                  ],
+                ),
+              ],
             ],
-          ],
+          ),
         ),
       ),
     );

@@ -59,7 +59,6 @@ class DonationsApiService {
     String? imagePath,
   }) async {
     if (imagePath != null && imagePath.isNotEmpty) {
-      print("Create Donation api was entered!!");
       final response = await _apiClient.postMultipart(
         ApiConstants.donations,
         fields: fields,
@@ -112,10 +111,36 @@ class DonationsApiService {
     required String token,
     required dynamic id,
     String pickupMethod = 'SELF',
+    DateTime? scheduledPickupStart,
+    DateTime? scheduledPickupEnd,
+    String? volunteerName,
+    String? volunteerPhone,
+    String? donorNote,
+    int? peopleServedConfirmed,
   }) async {
+    final body = <String, dynamic>{'pickup_method': pickupMethod};
+    if (scheduledPickupStart != null) {
+      body['scheduled_pickup_start'] = scheduledPickupStart.toIso8601String();
+    }
+    if (scheduledPickupEnd != null) {
+      body['scheduled_pickup_end'] = scheduledPickupEnd.toIso8601String();
+    }
+    if (volunteerName != null && volunteerName.isNotEmpty) {
+      body['volunteer_name'] = volunteerName;
+    }
+    if (volunteerPhone != null && volunteerPhone.isNotEmpty) {
+      body['volunteer_phone'] = volunteerPhone;
+    }
+    if (donorNote != null && donorNote.isNotEmpty) {
+      body['donor_note'] = donorNote;
+    }
+    if (peopleServedConfirmed != null) {
+      body['people_served_confirmed'] = peopleServedConfirmed;
+    }
+
     final response = await _apiClient.post(
       ApiConstants.claimDonation(id),
-      body: {'pickup_method': pickupMethod},
+      body: body,
       token: token,
     );
     return response is Map<String, dynamic> ? response : {};

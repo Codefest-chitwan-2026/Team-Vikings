@@ -30,6 +30,34 @@ class VerificationDocumentCard extends StatelessWidget {
             document.localFilePath!.toLowerCase().endsWith('.jpeg') ||
             document.localFilePath!.toLowerCase().endsWith('.png'));
 
+    final hasRemoteImage = document.photoUrl != null &&
+        document.photoUrl!.isNotEmpty &&
+        (document.type == VerificationDocumentType.image ||
+            document.photoUrl!.toLowerCase().endsWith('.jpg') ||
+            document.photoUrl!.toLowerCase().endsWith('.jpeg') ||
+            document.photoUrl!.toLowerCase().endsWith('.png'));
+
+    Widget thumbnail;
+    if (hasLocalImage) {
+      thumbnail = Image.file(
+        File(document.localFilePath!),
+        width: 48,
+        height: 48,
+        fit: BoxFit.cover,
+        errorBuilder: (context, error, stackTrace) => _defaultDocIcon(),
+      );
+    } else if (hasRemoteImage) {
+      thumbnail = Image.network(
+        document.photoUrl!,
+        width: 48,
+        height: 48,
+        fit: BoxFit.cover,
+        errorBuilder: (context, error, stackTrace) => _defaultDocIcon(),
+      );
+    } else {
+      thumbnail = _defaultDocIcon();
+    }
+
     return Material(
       color: AppColors.surface,
       borderRadius: BorderRadius.circular(14),
@@ -56,15 +84,7 @@ class VerificationDocumentCard extends StatelessWidget {
                 ),
                 clipBehavior: Clip.antiAlias,
                 alignment: Alignment.center,
-                child: hasLocalImage
-                    ? Image.file(
-                        File(document.localFilePath!),
-                        width: 48,
-                        height: 48,
-                        fit: BoxFit.cover,
-                        errorBuilder: (context, error, stackTrace) => _defaultDocIcon(),
-                      )
-                    : _defaultDocIcon(),
+                child: thumbnail,
               ),
               const SizedBox(width: 14),
               Expanded(

@@ -81,6 +81,7 @@ class DonationRepository implements IDonationRepository {
     double? longitude,
     double? radiusKm,
   }) async {
+    print("Reached!!");
     final list = await _apiService.getDonations(
       token: token,
       foodType: foodType,
@@ -90,6 +91,7 @@ class DonationRepository implements IDonationRepository {
       longitude: longitude,
       radiusKm: radiusKm,
     );
+    print(list);
 
     return list
         .whereType<Map<String, dynamic>>()
@@ -123,6 +125,7 @@ class DonationRepository implements IDonationRepository {
   @override
   Future<List<DonationItem>> getNgoPriorityDonations({required String token}) async {
     final list = await _apiService.getNgoPriorityDonations(token: token);
+    print("Hi");
     return list
         .whereType<Map<String, dynamic>>()
         .map((e) => DonationItem.fromJson(e))
@@ -154,6 +157,12 @@ class DonationRepository implements IDonationRepository {
       token: token,
       id: id,
       pickupMethod: pickupMethod,
+      scheduledPickupStart: scheduledPickupStart,
+      scheduledPickupEnd: scheduledPickupEnd,
+      volunteerName: volunteerName,
+      volunteerPhone: volunteerPhone,
+      donorNote: donorNote,
+      peopleServedConfirmed: peopleServedConfirmed,
     );
   }
 

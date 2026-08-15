@@ -1,3 +1,4 @@
+import '../core/constants/api_constants.dart';
 import '../models/nearby_ngo_model.dart';
 import '../models/verification_document_model.dart';
 import '../services/profile_api_service.dart';
@@ -55,20 +56,34 @@ class ProfileRepository implements IProfileRepository {
     final list = await _apiService.getVerificationDocuments(token: token);
     return list
         .whereType<Map<String, dynamic>>()
-        .map((e) => VerificationDocumentModel(
-              id: (e['id'] ?? '').toString(),
-              title: e['title'] ?? 'Verification Document',
-              fileName: e['file_name'] ?? 'document.pdf',
-              type: (e['document_type'] ?? 'PDF').toString().toUpperCase() == 'PDF'
-                  ? VerificationDocumentType.pdf
-                  : VerificationDocumentType.image,
-              status: _parseDocStatus(e['status']),
-              submittedOn: e['submitted_on'] != null
-                  ? DateTime.tryParse(e['submitted_on'].toString()) ?? DateTime.now()
-                  : DateTime.now(),
-              issuedIdNumber: e['issued_id_number'] ?? '',
-              issuerAuthority: e['issuer_authority'] ?? '',
-            ))
+        .map((e) {
+          final docFile = e['document_file']?.toString();
+          String? photoUrl;
+          if (docFile != null && docFile.isNotEmpty) {
+            photoUrl = docFile.startsWith('http')
+                ? docFile
+                : (docFile.startsWith('/') ? '${ApiConstants.baseUrl}$docFile' : '${ApiConstants.baseUrl}/$docFile');
+          }
+          final fName = (e['file_name'] != null && e['file_name'].toString().isNotEmpty)
+              ? e['file_name'].toString()
+              : (docFile != null ? docFile.split('/').last : 'document.pdf');
+          final isPdf = (e['document_type'] ?? '').toString().toUpperCase() == 'PDF' || fName.toLowerCase().endsWith('.pdf');
+
+          return VerificationDocumentModel(
+            id: (e['id'] ?? '').toString(),
+            title: e['title'] ?? 'Verification Document',
+            fileName: fName,
+            type: isPdf ? VerificationDocumentType.pdf : VerificationDocumentType.image,
+            status: _parseDocStatus(e['status']),
+            submittedOn: e['submitted_on'] != null
+                ? DateTime.tryParse(e['submitted_on'].toString()) ?? DateTime.now()
+                : DateTime.now(),
+            issuedIdNumber: e['issued_id_number']?.toString() ?? '',
+            reviewNote: e['review_note']?.toString(),
+            issuerAuthority: e['issuer_authority']?.toString() ?? '',
+            photoUrl: photoUrl,
+          );
+        })
         .toList();
   }
 
@@ -83,18 +98,32 @@ class ProfileRepository implements IProfileRepository {
       fields: fields,
       filePath: filePath,
     );
+    final docFile = res['document_file']?.toString();
+    String? photoUrl;
+    if (docFile != null && docFile.isNotEmpty) {
+      photoUrl = docFile.startsWith('http')
+          ? docFile
+          : (docFile.startsWith('/') ? '${ApiConstants.baseUrl}$docFile' : '${ApiConstants.baseUrl}/$docFile');
+    }
+    final fName = (res['file_name'] != null && res['file_name'].toString().isNotEmpty)
+        ? res['file_name'].toString()
+        : filePath.split(RegExp(r'[\\/]')).last;
+    final isPdf = (res['document_type'] ?? '').toString().toUpperCase() == 'PDF' || fName.toLowerCase().endsWith('.pdf');
+
     return VerificationDocumentModel(
       id: (res['id'] ?? 'doc-${DateTime.now().millisecondsSinceEpoch}').toString(),
       title: res['title'] ?? fields['title'] ?? 'Uploaded Document',
-      fileName: filePath.split(RegExp(r'[\\/]')).last,
-      type: filePath.toLowerCase().endsWith('.pdf')
-          ? VerificationDocumentType.pdf
-          : VerificationDocumentType.image,
-      status: VerificationDocumentStatus.pending,
-      submittedOn: DateTime.now(),
-      issuedIdNumber: fields['issued_id_number'] ?? '',
+      fileName: fName,
+      type: isPdf ? VerificationDocumentType.pdf : VerificationDocumentType.image,
+      status: _parseDocStatus(res['status']),
+      submittedOn: res['submitted_on'] != null
+          ? DateTime.tryParse(res['submitted_on'].toString()) ?? DateTime.now()
+          : DateTime.now(),
+      issuedIdNumber: res['issued_id_number']?.toString() ?? fields['issued_id_number'] ?? '',
+      reviewNote: res['review_note']?.toString(),
       localFilePath: filePath,
-      issuerAuthority: fields['issuer_authority'] ?? 'Self Submitted',
+      photoUrl: photoUrl,
+      issuerAuthority: res['issuer_authority']?.toString() ?? fields['issuer_authority'] ?? 'Self Submitted',
     );
   }
 

@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../../core/constants/app_colors.dart';
 import '../../models/user_model.dart';
+import '../../models/verification_document_model.dart';
 import '../../providers/auth_provider.dart';
 import '../../widgets/shared/profile_widgets.dart';
 import '../shared/login_screen.dart';
@@ -57,6 +58,33 @@ class RecipientProfileScreen extends StatelessWidget {
     final initials = user?.initials ?? 'NG';
     final avatarPath = user?.profileData?['avatar_path'] as String?;
 
+    final ngoDocs = authProvider.getDocumentsForRole(UserRole.ngo);
+    Widget? verificationBadge;
+    if (ngoDocs.isNotEmpty) {
+      final doc = ngoDocs.first;
+      final isVerified = doc.status == VerificationDocumentStatus.verified;
+      final isPending = doc.status == VerificationDocumentStatus.pending;
+      verificationBadge = Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+        decoration: BoxDecoration(
+          color: isVerified
+              ? const Color(0xFFE4F6E9)
+              : (isPending ? const Color(0xFFFFF7ED) : const Color(0xFFFFEBEE)),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Text(
+          isVerified ? 'Verified' : (isPending ? 'Pending Review' : 'Needs Update'),
+          style: TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.bold,
+            color: isVerified
+                ? const Color(0xFF2E7D32)
+                : (isPending ? const Color(0xFFC05621) : AppColors.error),
+          ),
+        ),
+      );
+    }
+
     return SafeArea(
       child: ListView(
         padding: const EdgeInsets.fromLTRB(20, 24, 20, 24),
@@ -82,6 +110,7 @@ class RecipientProfileScreen extends StatelessWidget {
           ProfileMenuTile(
             icon: Icons.verified_user_outlined,
             label: 'Verification document',
+            trailing: verificationBadge,
             onTap: () => _openVerificationDocuments(context, authProvider),
           ),
           const Divider(height: 1, color: AppColors.border),

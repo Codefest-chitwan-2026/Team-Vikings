@@ -90,6 +90,7 @@ class ProfileMenuTile extends StatelessWidget {
     required this.onTap,
     this.isDestructive = false,
     this.showChevron = true,
+    this.trailing,
   });
 
   final IconData icon;
@@ -97,6 +98,7 @@ class ProfileMenuTile extends StatelessWidget {
   final VoidCallback onTap;
   final bool isDestructive;
   final bool showChevron;
+  final Widget? trailing;
 
   @override
   Widget build(BuildContext context) {
@@ -115,6 +117,10 @@ class ProfileMenuTile extends StatelessWidget {
                 style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: color),
               ),
             ),
+            if (trailing != null) ...[
+              trailing!,
+              const SizedBox(width: 8),
+            ],
             if (showChevron)
               const Icon(Icons.chevron_right_rounded, color: AppColors.textSecondary),
           ],

@@ -99,18 +99,25 @@ class DonationProvider extends ChangeNotifier {
   }
 
   /// Fetch NGO priority listings for Recipient app
-  Future<void> fetchNgoPriorityListings({required String? token}) async {
-    if (token == null || token.isEmpty) return;
+  Future<void>  fetchNgoPriorityListings({required String? token}) async {
+    if (token == null || token.isEmpty) {
+      debugPrint('[DonationProvider] fetchNgoPriorityListings: skipped, no token');
+      return;
+    }
 
     _isLoading = true;
     _errorMessage = null;
     notifyListeners();
 
     try {
+      debugPrint('[DonationProvider] fetchNgoPriorityListings: requesting with token=${token.substring(0, token.length < 12 ? token.length : 12)}...');
       final list = await _donationRepository.getNgoPriorityDonations(token: token);
+      debugPrint('[DonationProvider] fetchNgoPriorityListings: got ${list.length} item(s) back');
       _ngoPriorityDonations.clear();
       _ngoPriorityDonations.addAll(list);
-    } catch (e) {
+    } catch (e, st) {
+      debugPrint('[DonationProvider] fetchNgoPriorityListings: FAILED — $e');
+      debugPrint('$st');
       _errorMessage = ErrorSanitizer.sanitize(e, defaultMessage: 'Unable to load priority food listings.');
     } finally {
       _isLoading = false;
