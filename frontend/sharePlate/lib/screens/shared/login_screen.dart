@@ -27,9 +27,8 @@ class _LoginScreenState extends State<LoginScreen> {
   final TextEditingController _phoneController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
   bool _rememberMe = false;
-  String? _phoneError;
-  String? _passwordError;
-  String? _formGeneralError;
+  bool _hasLoginError = false;
+  String? _loginErrorMessage;
 
   @override
   void initState() {
@@ -53,9 +52,8 @@ class _LoginScreenState extends State<LoginScreen> {
   Future<void> _onLogin() async {
     FocusScope.of(context).unfocus();
     setState(() {
-      _phoneError = null;
-      _passwordError = null;
-      _formGeneralError = null;
+      _hasLoginError = false;
+      _loginErrorMessage = null;
     });
 
     if (!_formKey.currentState!.validate()) {
@@ -91,21 +89,20 @@ class _LoginScreenState extends State<LoginScreen> {
           break;
       }
 
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (_) => targetScreen),
-      );
-    } else {
-      final error = authProvider.errorMessage ?? 'Invalid phone number or password.';
-      setState(() {
-        if (error.toLowerCase().contains('phone') || error.toLowerCase().contains('user') || error.toLowerCase().contains('account')) {
-          _phoneError = error;
-        } else if (error.toLowerCase().contains('password')) {
-          _passwordError = error;
-        } else {
-          _phoneError = 'Please check your phone number';
-          _passwordError = 'Invalid credentials or wrong password';
-          _formGeneralError = error;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(builder: (_) => targetScreen),
+          );
         }
+      });
+    } else {
+      final error = authProvider.errorMessage;
+      setState(() {
+        _hasLoginError = true;
+        _loginErrorMessage = (error != null && error.isNotEmpty)
+            ? error
+            : 'Invalid password or email';
       });
     }
   }
@@ -126,7 +123,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final authProvider = context.watch<AuthProvider>();
+    final isLoading = context.select<AuthProvider, bool>((a) => a.isLoading);
 
     return Scaffold(
       backgroundColor: AppColors.surface,
@@ -159,57 +156,26 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                 ),
 
-                if (_formGeneralError != null) ...[
-                  const SizedBox(height: 20),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                    decoration: BoxDecoration(
-                      color: AppColors.error.withValues(alpha: 0.08),
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: AppColors.error.withValues(alpha: 0.3)),
-                    ),
-                    child: Row(
-                      children: [
-                        const Icon(Icons.error_outline, color: AppColors.error, size: 20),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Text(
-                            _formGeneralError!,
-                            style: const TextStyle(
-                              color: AppColors.error,
-                              fontSize: 13,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-
                 const SizedBox(height: 32),
 
-                // Phone Field
+                // Phone/Email Field
                 CustomTextField(
-                  label: 'Phone number',
-                  hintText: 'Enter your phone number (e.g. 98XXXXXXXX)',
+                  label: 'Phone number or Email',
+                  hintText: 'Enter your phone number or email',
                   controller: _phoneController,
-                  keyboardType: TextInputType.phone,
-                  errorText: _phoneError,
+                  keyboardType: TextInputType.text,
+                  hasError: _hasLoginError,
                   onChanged: (_) {
-                    if (_phoneError != null || _formGeneralError != null) {
+                    if (_hasLoginError) {
                       setState(() {
-                        _phoneError = null;
-                        _formGeneralError = null;
+                        _hasLoginError = false;
+                        _loginErrorMessage = null;
                       });
                     }
                   },
                   validator: (value) {
                     if (value == null || value.trim().isEmpty) {
-                      return 'Please enter your phone number';
-                    }
-                    if (value.trim().replaceAll(RegExp(r'\D'), '').length < 7) {
-                      return 'Please enter a valid phone number (min 7 digits)';
+                      return 'Please enter your phone number or email';
                     }
                     return null;
                   },
@@ -223,12 +189,12 @@ class _LoginScreenState extends State<LoginScreen> {
                   hintText: 'Enter your password',
                   controller: _passwordController,
                   isPassword: true,
-                  errorText: _passwordError,
+                  hasError: _hasLoginError,
                   onChanged: (_) {
-                    if (_passwordError != null || _formGeneralError != null) {
+                    if (_hasLoginError) {
                       setState(() {
-                        _passwordError = null;
-                        _formGeneralError = null;
+                        _hasLoginError = false;
+                        _loginErrorMessage = null;
                       });
                     }
                   },
@@ -242,6 +208,36 @@ class _LoginScreenState extends State<LoginScreen> {
                     return null;
                   },
                 ),
+
+                // Red Container below password box on invalid password or email
+                if (_hasLoginError && _loginErrorMessage != null) ...[
+                  const SizedBox(height: 12),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFCE8E8),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: const Color(0xFFE57373)),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.error_outline_rounded, color: Color(0xFFD32F2F), size: 19),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            _loginErrorMessage!,
+                            style: const TextStyle(
+                              color: Color(0xFFC62828),
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
 
                 const SizedBox(height: 12),
 
@@ -296,12 +292,11 @@ class _LoginScreenState extends State<LoginScreen> {
                 // Login Action Button
                 PrimaryButton(
                   text: 'Login',
-                  isLoading: authProvider.isLoading,
+                  isLoading: isLoading,
                   onPressed: _onLogin,
                 ),
 
                 const SizedBox(height: 20),
-
                 // Sign-up Redirect Prompt
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,

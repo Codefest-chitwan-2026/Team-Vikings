@@ -14,7 +14,7 @@ class BrowseNearbyTab extends StatefulWidget {
 }
 
 class _BrowseNearbyTabState extends State<BrowseNearbyTab> {
-  RecipientListingFilter _filter = RecipientListingFilter.all;
+  RecipientListingFilter _filter = RecipientListingFilter.doneCompleted;
   String _query = '';
 
   List<RecipientListing> get _filteredListings {

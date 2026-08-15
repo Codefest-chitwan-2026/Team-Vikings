@@ -185,7 +185,9 @@ class _NearbyNgosListScreenState extends State<NearbyNgosListScreen> {
                           onTap: () {
                             Navigator.of(context).push(
                               MaterialPageRoute(
-                                builder: (_) => NgoDetailScreen(ngo: ngo),
+                                // builder: (_) => NgoDetailScreen(ngo: ngo),
+                                builder: (_) => NgoDetailScreen(),
+
                               ),
                             );
                           },

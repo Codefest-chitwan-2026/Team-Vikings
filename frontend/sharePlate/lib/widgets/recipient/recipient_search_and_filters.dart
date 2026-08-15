@@ -100,10 +100,9 @@ class RecipientFilterChips extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final filters = [
-      (RecipientListingFilter.all, 'All ($totalCount)'),
-      (RecipientListingFilter.freeOnly, 'Free only'),
-      (RecipientListingFilter.discounted, 'Discounted'),
-      (RecipientListingFilter.underThirtyMin, '< 30 min'),
+      (RecipientListingFilter.doneCompleted, 'Done/Completed'),
+      (RecipientListingFilter.remaining, 'Remaining'),
+      (RecipientListingFilter.pending, 'Pending'),
     ];
 
     return SingleChildScrollView(

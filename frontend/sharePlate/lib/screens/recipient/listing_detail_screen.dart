@@ -1,28 +1,50 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 import '../../core/constants/app_colors.dart';
 import '../../models/recipient_listing_model.dart';
+import '../../providers/auth_provider.dart';
+import '../../providers/donation_provider.dart';
 import '../../widgets/login_screen/primary_button.dart';
 import 'claim_success_screen.dart';
 
-class ListingDetailScreen extends StatelessWidget {
+class ListingDetailScreen extends StatefulWidget {
   const ListingDetailScreen({super.key, required this.listing});
 
   final RecipientListing listing;
 
-  Future<void> _claimListing(BuildContext context) async {
-    await Future<void>.delayed(const Duration(milliseconds: 600));
-    if (!context.mounted) return;
+  @override
+  State<ListingDetailScreen> createState() => _ListingDetailScreenState();
+}
+
+class _ListingDetailScreenState extends State<ListingDetailScreen> {
+  bool _isClaiming = false;
+
+  Future<void> _claimListing() async {
+    setState(() => _isClaiming = true);
+
+    final authProvider = context.read<AuthProvider>();
+    final donationProvider = context.read<DonationProvider>();
+
+    await donationProvider.claimDonationOnApi(
+      token: authProvider.currentUser?.token,
+      donationId: widget.listing.id,
+      pickupMethod: 'SELF',
+    );
+
+    if (!mounted) return;
+    setState(() => _isClaiming = false);
 
     Navigator.of(context).pushReplacement(
       MaterialPageRoute(
-        builder: (_) => ClaimSuccessScreen(listing: listing),
+        builder: (_) => ClaimSuccessScreen(listing: widget.listing),
       ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
+    final listing = widget.listing;
     final badgeColor =
         listing.isFree ? AppColors.primaryEmerald : AppColors.secondary;
 
@@ -136,7 +158,8 @@ class ListingDetailScreen extends StatelessWidget {
                 text: listing.isFree
                     ? 'Claim this listing →'
                     : 'Buy at ${listing.priceLabel ?? 'discount'} →',
-                onPressed: () => _claimListing(context),
+                isLoading: _isClaiming,
+                onPressed: _claimListing,
               ),
             ),
           ),

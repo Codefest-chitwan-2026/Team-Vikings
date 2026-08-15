@@ -72,15 +72,64 @@ class ApiClient {
     }
   }
 
+  Future<dynamic> patch(
+    String url, {
+    dynamic body,
+    String? token,
+    Map<String, String>? headers,
+  }) async {
+    try {
+      final uri = Uri.parse(url);
+      final encodedBody = body != null ? jsonEncode(body) : null;
+      final response = await _client
+          .patch(
+            uri,
+            headers: _buildHeaders(token: token, extraHeaders: headers),
+            body: encodedBody,
+          )
+          .timeout(ApiConstants.connectTimeout);
+      return _handleResponse(response);
+    } on SocketException catch (_) {
+      throw NetworkException();
+    } on TimeoutException catch (_) {
+      throw NetworkException('Request timed out. Please try again.');
+    } catch (e) {
+      if (e is AppException) rethrow;
+      throw AppException(e.toString());
+    }
+  }
+
+  Future<dynamic> delete(
+    String url, {
+    String? token,
+    Map<String, String>? headers,
+  }) async {
+    try {
+      final uri = Uri.parse(url);
+      final response = await _client
+          .delete(uri, headers: _buildHeaders(token: token, extraHeaders: headers))
+          .timeout(ApiConstants.connectTimeout);
+      return _handleResponse(response);
+    } on SocketException catch (_) {
+      throw NetworkException();
+    } on TimeoutException catch (_) {
+      throw NetworkException('Request timed out. Please try again.');
+    } catch (e) {
+      if (e is AppException) rethrow;
+      throw AppException(e.toString());
+    }
+  }
+
   Future<dynamic> postMultipart(
     String url, {
     required Map<String, String> fields,
     Map<String, String>? filePaths,
     String? token,
+    String method = 'POST',
   }) async {
     try {
       final uri = Uri.parse(url);
-      final request = http.MultipartRequest('POST', uri);
+      final request = http.MultipartRequest(method, uri);
 
       if (token != null && token.isNotEmpty) {
         request.headers['Authorization'] = 'Bearer $token';
@@ -114,6 +163,15 @@ class ApiClient {
       if (e is AppException) rethrow;
       throw AppException(e.toString());
     }
+  }
+
+  Future<dynamic> patchMultipart(
+    String url, {
+    required Map<String, String> fields,
+    Map<String, String>? filePaths,
+    String? token,
+  }) {
+    return postMultipart(url, fields: fields, filePaths: filePaths, token: token, method: 'PATCH');
   }
 
   dynamic _handleResponse(http.Response response) {

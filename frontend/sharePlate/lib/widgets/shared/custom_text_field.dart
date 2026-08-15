@@ -9,6 +9,7 @@ class CustomTextField extends StatefulWidget {
   final TextInputType keyboardType;
   final String? Function(String?)? validator;
   final String? errorText;
+  final bool hasError;
   final AutovalidateMode? autovalidateMode;
   final ValueChanged<String>? onChanged;
   final int maxLines;
@@ -24,6 +25,7 @@ class CustomTextField extends StatefulWidget {
     this.keyboardType = TextInputType.text,
     this.validator,
     this.errorText,
+    this.hasError = false,
     this.autovalidateMode,
     this.onChanged,
     this.maxLines = 1,
@@ -40,7 +42,9 @@ class _CustomTextFieldState extends State<CustomTextField> {
 
   @override
   Widget build(BuildContext context) {
-    final hasCustomError = widget.errorText != null && widget.errorText!.isNotEmpty;
+    final hasCustomError =
+        (widget.errorText != null && widget.errorText!.isNotEmpty) ||
+            widget.hasError;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,

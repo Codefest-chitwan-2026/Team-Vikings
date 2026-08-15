@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../../core/constants/app_colors.dart';
 import '../../models/donation_model.dart';
 import '../../models/picked_location.dart';
+import '../../providers/auth_provider.dart';
 import '../../providers/donation_provider.dart';
 import '../../widgets/donor/add_donation/food_category_selector.dart';
 import '../../widgets/donor/add_donation/listing_type_toggle.dart';
@@ -42,6 +43,7 @@ class AddDonationScreen extends StatefulWidget {
 class _AddDonationScreenState extends State<AddDonationScreen> {
   final _formKey = GlobalKey<FormState>();
   final _foodNameController = TextEditingController();
+  final _descriptionController = TextEditingController();
   final _quantityController = TextEditingController();
   final _servesController = TextEditingController();
   final _originalPriceController = TextEditingController();
@@ -113,6 +115,7 @@ class _AddDonationScreenState extends State<AddDonationScreen> {
   @override
   void dispose() {
     _foodNameController.dispose();
+    _descriptionController.dispose();
     _quantityController.dispose();
     _servesController.dispose();
     _originalPriceController.dispose();
@@ -151,16 +154,22 @@ class _AddDonationScreenState extends State<AddDonationScreen> {
     }
 
     setState(() => _isLoading = true);
-    await Future<void>.delayed(const Duration(milliseconds: 600));
-    if (!mounted) return;
 
+    final authProvider = context.read<AuthProvider>();
     final donationProvider = context.read<DonationProvider>();
     final isEditing = widget.donationToEdit != null;
     final foodName = _foodNameController.text.trim();
+    final description = _descriptionController.text.trim();
     final quantity = int.tryParse(_quantityController.text.trim()) ?? 10;
     final serves = _servesController.text.trim();
     final originalPrice = double.tryParse(_originalPriceController.text.trim());
     final discountedPrice = double.tryParse(_discountedPriceController.text.trim());
+
+    final servesCount = int.tryParse(serves.replaceAll(RegExp(r'\D'), '')) ?? (quantity * 2);
+
+    String foodTypeStr = 'VEG';
+    if (_selectedCategory == FoodCategory.nonVeg) foodTypeStr = 'NONVEG';
+    if (_selectedCategory == FoodCategory.mixed) foodTypeStr = 'MIXED';
 
     if (isEditing) {
       final updated = widget.donationToEdit!.copyWith(
@@ -179,41 +188,43 @@ class _AddDonationScreenState extends State<AddDonationScreen> {
       );
       donationProvider.updateDonation(updated);
 
-      setState(() => _isLoading = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Donation updated successfully!'),
-          backgroundColor: AppColors.success,
-        ),
-      );
-      Navigator.of(context).pop();
+      if (mounted) {
+        setState(() => _isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Donation updated successfully!'),
+            backgroundColor: AppColors.success,
+          ),
+        );
+        Navigator.of(context).pop();
+      }
     } else {
-      final newDonation = DonationItem(
-        id: 'don_${DateTime.now().millisecondsSinceEpoch}',
-        postedAgo: 'Just now',
-        title: '$foodName · $quantity Plates',
-        category: _selectedCategory,
-        quantity: quantity,
+      await donationProvider.createDonationOnApi(
+        token: authProvider.currentUser?.token,
+        title: foodName,
+        description: description.isEmpty
+            ? 'Freshly prepared food items ready for immediate collection.'
+            : description,
+        foodType: foodTypeStr,
+        quantity: quantity.toDouble(),
         quantityUnit: 'Plates',
-        servesApprox: serves.isNotEmpty ? serves : '$quantity people',
-        status: DonationStatus.awaitingClaim,
-        isActive: true,
+        peopleServed: servesCount,
+        bestBefore: DateTime.now().add(const Duration(hours: 4)),
         pickupAddress: _selectedLocation!.address,
-        pickupLatitude: _selectedLocation!.latitude,
-        pickupLongitude: _selectedLocation!.longitude,
-        pickupWindow: _pickupWindow,
-        listingType: _listingType,
-        originalPrice: originalPrice,
-        discountedPrice: discountedPrice,
+        latitude: _selectedLocation!.latitude,
+        longitude: _selectedLocation!.longitude,
+        listingType: _listingType == ListingType.discountedSale ? 'FLASH_SALE' : 'DONATION',
+        price: originalPrice,
+        flashSalePrice: discountedPrice,
         imagePath: _selectedImagePath,
-        receiptNumber: 'SP-DON-2026-${DateTime.now().millisecond}',
       );
-      donationProvider.addDonation(newDonation);
 
-      setState(() => _isLoading = false);
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (_) => const ListingSuccessScreen()),
-      );
+      if (mounted) {
+        setState(() => _isLoading = false);
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(builder: (_) => const ListingSuccessScreen()),
+        );
+      }
     }
   }
 
@@ -278,6 +289,13 @@ class _AddDonationScreenState extends State<AddDonationScreen> {
                 hintText: 'e.g. Rice bowl with curry',
                 controller: _foodNameController,
                 validator: (value) => _required(value, 'food item name'),
+              ),
+              const SizedBox(height: 16),
+              CustomTextField(
+                label: 'Description',
+                hintText: 'e.g. Freshly cooked, contains rice, lentils, and mixed vegetables',
+                controller: _descriptionController,
+                maxLines: 3,
               ),
               const SizedBox(height: 16),
               Row(

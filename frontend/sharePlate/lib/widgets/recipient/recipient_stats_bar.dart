@@ -14,13 +14,6 @@ class RecipientStatsBar extends StatelessWidget {
       children: [
         Expanded(
           child: _StatItem(
-            value: '${stats.mealsClaimed}',
-            label: 'Meals claimed',
-          ),
-        ),
-        _divider(),
-        Expanded(
-          child: _StatItem(
             value: '${stats.activeListings}',
             label: 'Active listings',
           ),

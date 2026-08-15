@@ -18,8 +18,8 @@ class RecipientBottomNavigation extends StatelessWidget {
       _NavigationDestination(icon: Icons.home_outlined, label: 'Home'),
       _NavigationDestination(icon: Icons.grid_view_rounded, label: 'Browse'),
       _NavigationDestination(
-        icon: Icons.notifications_none_rounded,
-        label: 'Notification',
+        icon: Icons.assignment_turned_in_outlined,
+        label: 'Claimed',
       ),
       _NavigationDestination(icon: Icons.person_outline_rounded, label: 'Profile'),
     ];

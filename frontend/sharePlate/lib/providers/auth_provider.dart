@@ -1,18 +1,47 @@
-import 'package:flutter/foundation.dart';
+import 'package:flutter/scheduler.dart';
+import 'package:flutter/widgets.dart';
 import '../core/errors/app_exceptions.dart';
 import '../models/business_registration_model.dart';
 import '../models/ngo_model.dart';
 import '../models/user_model.dart';
 import '../models/verification_document_model.dart';
 import '../repositories/auth_repository.dart';
+import '../services/profile_api_service.dart';
 
 enum AuthStatus { initial, unauthenticated, authenticating, authenticated, failure }
 
 class AuthProvider extends ChangeNotifier {
   final IAuthRepository _authRepository;
+  final ProfileApiService _profileApiService;
 
-  AuthProvider({required IAuthRepository authRepository})
-      : _authRepository = authRepository;
+  AuthProvider({
+    required IAuthRepository authRepository,
+    ProfileApiService? profileApiService,
+  })  : _authRepository = authRepository,
+        _profileApiService = profileApiService ?? ProfileApiService();
+
+  bool _isDisposed = false;
+
+  @override
+  void dispose() {
+    _isDisposed = true;
+    super.dispose();
+  }
+
+  @override
+  void notifyListeners() {
+    if (_isDisposed) return;
+    final binding = WidgetsBinding.instance;
+    if (binding.schedulerPhase != SchedulerPhase.idle) {
+      binding.addPostFrameCallback((_) {
+        if (!_isDisposed && hasListeners) {
+          super.notifyListeners();
+        }
+      });
+    } else {
+      super.notifyListeners();
+    }
+  }
 
   AuthStatus _status = AuthStatus.initial;
   UserModel? _currentUser;
@@ -64,6 +93,8 @@ class AuthProvider extends ChangeNotifier {
         _currentUser = _authRepository.getCurrentUser();
         if (_currentUser != null) {
           _status = AuthStatus.authenticated;
+          // Sync profile from backend
+          await syncProfileFromBackend();
         } else {
           _status = AuthStatus.unauthenticated;
         }
@@ -75,6 +106,40 @@ class AuthProvider extends ChangeNotifier {
     } finally {
       _isLoading = false;
       notifyListeners();
+    }
+  }
+
+  /// Syncs latest profile data from GET /api/profiles/me/
+  Future<void> syncProfileFromBackend() async {
+    final token = _currentUser?.token;
+    if (token == null || token.isEmpty) return;
+
+    try {
+      final profileData = await _profileApiService.getMyProfile(token: token);
+      if (profileData.isNotEmpty && _currentUser != null) {
+        final String name = profileData['full_name'] ??
+            profileData['business_name'] ??
+            profileData['organization_name'] ??
+            _currentUser!.name;
+        final String? orgName = profileData['organization_name'] ??
+            profileData['business_name'] ??
+            _currentUser!.organizationName;
+        final String? address = profileData['address'] ?? _currentUser!.address;
+        final String phone = profileData['phone_num'] ?? _currentUser!.phone;
+        final String email = profileData['email'] ?? _currentUser!.email;
+
+        _currentUser = _currentUser!.copyWith(
+          name: name,
+          organizationName: orgName,
+          address: address,
+          phone: phone,
+          email: email,
+          profileData: profileData,
+        );
+        notifyListeners();
+      }
+    } catch (_) {
+      // Keep local state if server is offline
     }
   }
 
@@ -254,15 +319,16 @@ class AuthProvider extends ChangeNotifier {
     return false;
   }
 
-  /// Updates the current user profile in state
-  void updateUserProfile({
+  /// Updates the current user profile in state and syncs with backend
+  Future<void> updateUserProfile({
     String? name,
     String? organizationName,
     String? email,
     String? phone,
     String? address,
     Map<String, dynamic>? additionalProfileData,
-  }) {
+    String? documentFilePath,
+  }) async {
     if (_currentUser != null) {
       final mergedData = Map<String, dynamic>.from(_currentUser!.profileData ?? {});
       if (additionalProfileData != null) {
@@ -278,10 +344,38 @@ class AuthProvider extends ChangeNotifier {
         profileData: mergedData,
       );
       notifyListeners();
+
+      // Sync with backend PATCH /api/profiles/me/
+      final token = _currentUser?.token;
+      if (token != null && token.isNotEmpty) {
+        try {
+          final fields = <String, String>{};
+          if (name != null) {
+            if (_currentUser!.isConsumer) fields['full_name'] = name;
+          }
+          if (organizationName != null) {
+            if (_currentUser!.isDonor) fields['business_name'] = organizationName;
+            if (_currentUser!.isNgo) fields['organization_name'] = organizationName;
+          }
+          if (address != null) fields['address'] = address;
+          if (phone != null) fields['phone_num'] = phone;
+          if (email != null) fields['email'] = email;
+
+          if (fields.isNotEmpty || documentFilePath != null) {
+            await _profileApiService.updateMyProfile(
+              token: token,
+              fields: fields,
+              registrationDocumentPath: documentFilePath,
+            );
+          }
+        } catch (_) {
+          // Keep local state update
+        }
+      }
     }
   }
 
-  /// Updates a verification document in state
+  /// Updates a verification document in state and syncs with backend
   void updateVerificationDocument(
     VerificationDocumentModel updatedDoc, {
     UserRole? role,
@@ -303,6 +397,15 @@ class AuthProvider extends ChangeNotifier {
       }
     }
     notifyListeners();
+
+    // If local file was uploaded, sync to backend profile
+    if (updatedDoc.localFilePath != null && _currentUser?.token != null) {
+      _profileApiService.updateMyProfile(
+        token: _currentUser!.token!,
+        fields: {},
+        registrationDocumentPath: updatedDoc.localFilePath,
+      ).catchError((_) => <String, dynamic>{});
+    }
   }
 
   /// Adds a new verification document
@@ -317,6 +420,14 @@ class AuthProvider extends ChangeNotifier {
       _businessDocuments.insert(0, newDoc);
     }
     notifyListeners();
+
+    if (newDoc.localFilePath != null && _currentUser?.token != null) {
+      _profileApiService.updateMyProfile(
+        token: _currentUser!.token!,
+        fields: {},
+        registrationDocumentPath: newDoc.localFilePath,
+      ).catchError((_) => <String, dynamic>{});
+    }
   }
 
   /// Logs out the user

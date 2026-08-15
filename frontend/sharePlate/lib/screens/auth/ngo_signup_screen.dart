@@ -11,6 +11,7 @@ import '../../widgets/login_screen/primary_button.dart';
 import '../../widgets/shared/custom_text_field.dart';
 import '../../widgets/shared/document_upload_tile.dart';
 import '../recipient/recipient_home_screen.dart';
+import '../shared/login_screen.dart';
 import '../shared/map_address_picker_screen.dart';
 
 class NgoSignUpScreen extends StatefulWidget {
@@ -24,7 +25,6 @@ class _NgoSignUpScreenState extends State<NgoSignUpScreen> {
   final _formKey = GlobalKey<FormState>();
   final _ngoModel = NgoRegistrationModel();
   final _nameController = TextEditingController();
-  final _contactNameController = TextEditingController();
   final _phoneController = TextEditingController();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
@@ -34,7 +34,6 @@ class _NgoSignUpScreenState extends State<NgoSignUpScreen> {
   PickedLocation? _selectedLocation;
 
   String? _nameError;
-  String? _contactNameError;
   String? _phoneError;
   String? _emailError;
   String? _passwordError;
@@ -47,7 +46,6 @@ class _NgoSignUpScreenState extends State<NgoSignUpScreen> {
   @override
   void dispose() {
     _nameController.dispose();
-    _contactNameController.dispose();
     _phoneController.dispose();
     _emailController.dispose();
     _passwordController.dispose();
@@ -84,7 +82,6 @@ class _NgoSignUpScreenState extends State<NgoSignUpScreen> {
     FocusScope.of(context).unfocus();
     setState(() {
       _nameError = null;
-      _contactNameError = null;
       _phoneError = null;
       _emailError = null;
       _passwordError = null;
@@ -168,7 +165,6 @@ class _NgoSignUpScreenState extends State<NgoSignUpScreen> {
   void _saveFormData() {
     _ngoModel
       ..organizationName = _nameController.text.trim()
-      ..contactName = _contactNameController.text.trim()
       ..phoneNumber = _phoneController.text.trim()
       ..email = _emailController.text.trim()
       ..password = _passwordController.text
@@ -214,7 +210,16 @@ class _NgoSignUpScreenState extends State<NgoSignUpScreen> {
             color: AppColors.charcoal,
             size: 20,
           ),
-          onPressed: () => Navigator.of(context).maybePop(),
+          tooltip: 'Back',
+          onPressed: () {
+            if (Navigator.of(context).canPop()) {
+              Navigator.of(context).pop();
+            } else {
+              Navigator.of(context).pushReplacement(
+                MaterialPageRoute(builder: (_) => const LoginScreen()),
+              );
+            }
+          },
         ),
         title: const Text(
           'Organization verification',
@@ -282,17 +287,6 @@ class _NgoSignUpScreenState extends State<NgoSignUpScreen> {
                   if (_nameError != null) setState(() => _nameError = null);
                 },
                 validator: (value) => _required(value, 'organization name'),
-              ),
-              const SizedBox(height: 16),
-              CustomTextField(
-                label: 'Contact person name',
-                hintText: 'Representative full name',
-                controller: _contactNameController,
-                errorText: _contactNameError,
-                onChanged: (_) {
-                  if (_contactNameError != null) setState(() => _contactNameError = null);
-                },
-                validator: (value) => _required(value, 'contact person name'),
               ),
               const SizedBox(height: 16),
               CustomTextField(
@@ -455,6 +449,37 @@ class _NgoSignUpScreenState extends State<NgoSignUpScreen> {
                 isLoading: authProvider.isLoading,
                 onPressed: _submitForReview,
               ),
+              const SizedBox(height: 20),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Text(
+                    'Already have an account? ',
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                  GestureDetector(
+                    onTap: () {
+                      Navigator.of(context).pushAndRemoveUntil(
+                        MaterialPageRoute(builder: (_) => const LoginScreen()),
+                        (route) => false,
+                      );
+                    },
+                    child: const Text(
+                      'Log in',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.primaryEmerald,
+                        decoration: TextDecoration.underline,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
             ],
           ),
         ),

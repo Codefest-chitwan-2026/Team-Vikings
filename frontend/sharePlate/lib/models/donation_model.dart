@@ -1,6 +1,16 @@
 enum FoodCategory { veg, nonVeg, mixed }
 
+extension FoodCategoryX on FoodCategory {
+  String get label => switch (this) {
+    FoodCategory.veg => 'Veg',
+    FoodCategory.nonVeg => 'Non-veg',
+    FoodCategory.mixed => 'Mixed',
+  };
+}
+
 enum ListingType { donateFree, discountedSale }
+
+enum ListingStatus { available, claimed, completed }
 
 enum DonationStatus { awaitingClaim, ngoEnRoute, completed }
 
@@ -70,6 +80,61 @@ class DonationItem {
     this.receiptNumber,
     this.completedDate,
   });
+
+  factory DonationItem.fromJson(Map<String, dynamic> json) {
+    final rawStatus = (json['status'] ?? 'AVAILABLE').toString().toUpperCase();
+    final rawFoodType = (json['food_type'] ?? 'VEG').toString().toUpperCase();
+    final rawListingType = (json['listing_type'] ?? 'DONATION').toString().toUpperCase();
+
+    final FoodCategory cat = rawFoodType == 'NONVEG'
+        ? FoodCategory.nonVeg
+        : (rawFoodType == 'MIXED' ? FoodCategory.mixed : FoodCategory.veg);
+
+    final ListingType listType = rawListingType == 'FLASH_SALE'
+        ? ListingType.discountedSale
+        : ListingType.donateFree;
+
+    DonationStatus donStatus;
+    bool active;
+    if (rawStatus == 'AVAILABLE') {
+      donStatus = DonationStatus.awaitingClaim;
+      active = true;
+    } else if (rawStatus == 'CLAIMED' || rawStatus == 'RESERVED') {
+      donStatus = DonationStatus.ngoEnRoute;
+      active = true;
+    } else {
+      donStatus = DonationStatus.completed;
+      active = false;
+    }
+
+    final claimMap = json['claim'] is Map<String, dynamic> ? json['claim'] as Map<String, dynamic> : null;
+    final ngoName = claimMap?['ngo_name'] ?? claimMap?['ngo_details']?['organization_name'];
+
+    return DonationItem(
+      id: (json['id'] ?? '').toString(),
+      postedAgo: json['created_at'] != null ? 'Recently' : '10 min ago',
+      title: json['title'] ?? 'Food Donation',
+      category: cat,
+      quantity: (double.tryParse(json['quantity']?.toString() ?? '10') ?? 10).toInt(),
+      quantityUnit: json['quantity_unit'] ?? 'Plates',
+      servesApprox: json['people_served'] != null
+          ? '${json['people_served']} people'
+          : '${json['quantity'] ?? 10} portions',
+      status: donStatus,
+      isActive: active,
+      recipient: ngoName?.toString(),
+      pickupAddress: json['pickup_address'] ?? 'Kathmandu',
+      pickupLatitude: double.tryParse(json['latitude']?.toString() ?? '') ?? 27.7215,
+      pickupLongitude: double.tryParse(json['longitude']?.toString() ?? '') ?? 85.3206,
+      listingType: listType,
+      originalPrice: double.tryParse(json['price']?.toString() ?? ''),
+      discountedPrice: double.tryParse(json['flash_sale_price']?.toString() ?? ''),
+      imagePath: json['image']?.toString(),
+      description: json['description']?.toString(),
+      receiptNumber: 'SP-DON-2026-${json['id'] ?? 1001}',
+      completedDate: json['updated_at']?.toString(),
+    );
+  }
 
   DonationItem copyWith({
     String? id,
@@ -230,28 +295,6 @@ class DonationModel {
       listingType: ListingType.donateFree,
       description: 'Fresh baked croissants, rolls, and vanilla muffins from today.',
       receiptNumber: 'SP-DON-2026-9884',
-    ),
-    DonationItem(
-      id: '3',
-      postedAgo: '3 days ago',
-      title: 'Wedding catering trays · 14 trays',
-      category: FoodCategory.mixed,
-      quantity: 14,
-      quantityUnit: 'Trays',
-      servesApprox: '45 people',
-      status: DonationStatus.completed,
-      isActive: true,
-      recipient: 'Aasha Foundation',
-      recipientPhone: '+977 9841234567',
-      recipientAddress: 'Lazimpat, Kathmandu',
-      pickupAddress: 'Royal Palace Events, Baluwatar, Kathmandu',
-      pickupLatitude: 27.7289,
-      pickupLongitude: 85.3340,
-      pickupWindow: '1 hour',
-      listingType: ListingType.donateFree,
-      description: 'Grand wedding catering surplus: Pulao, mutton curry, paneer, and naan.',
-      receiptNumber: 'SP-REC-2026-8812',
-      completedDate: 'Aug 11, 2026',
     ),
   ];
 

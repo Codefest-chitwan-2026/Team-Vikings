@@ -1,13 +1,15 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'package:shareplate/screens/recipient/recipient_claimed_donations_screen.dart';
 import 'package:shareplate/screens/recipient/recipient_notifications_screen.dart';
 import 'package:shareplate/screens/recipient/recipient_profile_screen.dart';
 
 import '../../core/constants/app_colors.dart';
 import '../../models/recipient_listing_model.dart';
+import '../../providers/auth_provider.dart';
 import '../../widgets/recipient/recipient_bottom_navigation.dart';
 import '../../widgets/recipient/recipient_listing_card.dart';
 import '../../widgets/recipient/recipient_search_and_filters.dart';
-import '../../widgets/recipient/recipient_stats_bar.dart';
 import 'browse_nearby_tab.dart';
 import 'listing_detail_screen.dart';
 
@@ -33,6 +35,12 @@ class _RecipientHomeScreenState extends State<RecipientHomeScreen> {
     setState(() => _selectedTab = index);
   }
 
+  void _openNotifications() {
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const RecipientNotificationsScreen()),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -41,11 +49,11 @@ class _RecipientHomeScreenState extends State<RecipientHomeScreen> {
         index: _selectedTab,
         children: [
           _RecipientHomeTab(
-            onNotificationsTap: () => _onTabSelected(2),
+            onNotificationsTap: _openNotifications,
             onSeeMoreTap: () => _onTabSelected(1),
           ),
           const BrowseNearbyTab(),
-          const RecipientNotificationsScreen(),
+          const RecipientClaimedDonationsScreen(),
           const RecipientProfileScreen(),
         ],
       ),
@@ -81,6 +89,7 @@ class _RecipientHomeTabState extends State<_RecipientHomeTab> {
 
     return RecipientListingModel.filter(
       typeFiltered.toList(),
+      filter: RecipientListingFilter.remaining,
       query: _query,
     );
   }
@@ -96,6 +105,8 @@ class _RecipientHomeTabState extends State<_RecipientHomeTab> {
   @override
   Widget build(BuildContext context) {
     final listings = _filteredListings;
+    final authProvider = context.watch<AuthProvider>();
+    final displayName = authProvider.currentUser?.displayName ?? 'Recipient';
 
     return SafeArea(
       child: Column(
@@ -103,14 +114,53 @@ class _RecipientHomeTabState extends State<_RecipientHomeTab> {
         children: [
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 24, 20, 0),
-            child: _RecipientHomeHeader(
-              onNotificationsTap: widget.onNotificationsTap,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Hi, $displayName',
+                        style: const TextStyle(
+                          color: AppColors.textSecondary,
+                          fontSize: 14,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      const Text(
+                        'You are a Recipient',
+                        style: TextStyle(
+                          color: AppColors.textPrimary,
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Material(
+                  color: AppColors.surface,
+                  shape: const CircleBorder(
+                    side: BorderSide(color: AppColors.border),
+                  ),
+                  clipBehavior: Clip.antiAlias,
+                  child: InkWell(
+                    onTap: widget.onNotificationsTap,
+                    child: const SizedBox(
+                      width: 40,
+                      height: 40,
+                      child: Icon(
+                        Icons.notifications_none_rounded,
+                        size: 22,
+                        color: AppColors.charcoal,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             ),
-          ),
-          const SizedBox(height: 16),
-          const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 20),
-            child: RecipientStatsBar(),
           ),
           const SizedBox(height: 16),
           Padding(
@@ -120,7 +170,7 @@ class _RecipientHomeTabState extends State<_RecipientHomeTab> {
               onChanged: (value) => setState(() => _query = value),
             ),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 16),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 20),
             child: RecipientListingTypeToggle(
@@ -158,84 +208,65 @@ class _RecipientHomeTabState extends State<_RecipientHomeTab> {
           const SizedBox(height: 8),
           Expanded(
             child: listings.isEmpty
-                ? const Center(
-                    child: Text(
-                      'No listings available in this category.',
-                      style: TextStyle(color: AppColors.textSecondary),
+                ? Center(
+              child: Padding(
+                padding: const EdgeInsets.all(32),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 64,
+                      height: 64,
+                      decoration: BoxDecoration(
+                        color: AppColors.primaryEmerald.withValues(alpha: 0.08),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(
+                        _showFreeListings
+                            ? Icons.volunteer_activism_outlined
+                            : Icons.local_offer_outlined,
+                        size: 30,
+                        color: AppColors.primaryEmerald,
+                      ),
                     ),
-                  )
+                    const SizedBox(height: 14),
+                    Text(
+                      _showFreeListings
+                          ? 'No free listings right now'
+                          : 'No discounted deals right now',
+                      style: const TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      _showFreeListings
+                          ? 'New free-to-claim food will show up here as soon as a donor posts it nearby.'
+                          : 'New discounted deals will show up here as soon as a donor posts one nearby.',
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
+                    ),
+                  ],
+                ),
+              ),
+            )
                 : ListView.separated(
-                    padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
-                    itemCount: listings.length,
-                    separatorBuilder: (_, _) => const SizedBox(height: 12),
-                    itemBuilder: (context, index) {
-                      final listing = listings[index];
-                      return RecipientListingCard(
-                        listing: listing,
-                        onTap: () => _openListing(listing),
-                      );
-                    },
-                  ),
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+              itemCount: listings.length,
+              separatorBuilder: (_, _) => const SizedBox(height: 12),
+              itemBuilder: (context, index) {
+                final listing = listings[index];
+                return RecipientListingCard(
+                  listing: listing,
+                  onTap: () => _openListing(listing),
+                );
+              },
+            ),
           ),
         ],
       ),
-    );
-  }
-}
-
-class _RecipientHomeHeader extends StatelessWidget {
-  const _RecipientHomeHeader({required this.onNotificationsTap});
-
-  final VoidCallback onNotificationsTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.center,
-      children: [
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Hi, ${RecipientListingModel.organizationName}',
-                style: const TextStyle(
-                  color: AppColors.textSecondary,
-                  fontSize: 14,
-                ),
-              ),
-              const SizedBox(height: 2),
-              const Text(
-                'You are a Recipient',
-                style: TextStyle(
-                  color: AppColors.textPrimary,
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ],
-          ),
-        ),
-        Material(
-          color: AppColors.surface,
-          shape: const CircleBorder(
-            side: BorderSide(color: AppColors.border),
-          ),
-          clipBehavior: Clip.antiAlias,
-          child: InkWell(
-            onTap: onNotificationsTap,
-            child: const SizedBox(
-              width: 40,
-              height: 40,
-              child: Icon(
-                Icons.notifications_none_rounded,
-                size: 22,
-                color: AppColors.charcoal,
-              ),
-            ),
-          ),
-        ),
-      ],
     );
   }
 }

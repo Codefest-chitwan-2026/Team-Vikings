@@ -20,9 +20,9 @@ class DonorProfileScreen extends StatelessWidget {
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => VerificationDocumentsScreen(
-          title: 'Business documents',
+          title: 'Verification document',
           subtitle:
-              'Documents you submitted to verify your business. These are reviewed before your listings go live.',
+              'Official document submitted to verify your business. This is reviewed before your listings go live.',
           documents: docs,
           role: UserRole.donor,
         ),
@@ -78,8 +78,8 @@ class DonorProfileScreen extends StatelessWidget {
           const Divider(height: 1, color: AppColors.border),
 
           ProfileMenuTile(
-            icon: Icons.credit_card_outlined,
-            label: 'Business documents',
+            icon: Icons.verified_user_outlined,
+            label: 'Verification document',
             onTap: () => _openBusinessDocuments(context, authProvider),
           ),
           const Divider(height: 1, color: AppColors.border),
