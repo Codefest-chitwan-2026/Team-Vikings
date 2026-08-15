@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 import '../../core/constants/app_colors.dart';
 import '../../models/consumer_order_model.dart';
 import '../../providers/auth_provider.dart';
@@ -55,90 +56,215 @@ class _ConsumerOrdersScreenState extends State<ConsumerOrdersScreen> {
   }
 
   void _showPickupDetails(ConsumerOrderModel order) {
-    showModalBottomSheet(
+    showDialog(
       context: context,
-      backgroundColor: Colors.transparent,
-      builder: (ctx) => Container(
-        padding: const EdgeInsets.all(24),
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-        ),
-        child: SafeArea(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: Colors.grey.shade300,
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-              const SizedBox(height: 18),
-              const Text(
-                'Pickup Verification Code',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.textPrimary,
-                ),
-              ),
-              const SizedBox(height: 6),
-              Text(
-                'Present this code at ${order.storeName} during pickup',
-                textAlign: TextAlign.center,
-                style: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
-              ),
-              const SizedBox(height: 20),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
-                decoration: BoxDecoration(
-                  color: AppColors.primaryEmerald.withValues(alpha: 0.08),
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: AppColors.primaryEmerald.withValues(alpha: 0.4)),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
+      barrierDismissible: true,
+      builder: (ctx) {
+        return Dialog(
+          backgroundColor: const Color(0xFFF1F3EA),
+          insetPadding: const EdgeInsets.symmetric(
+            horizontal: 14,
+            vertical: 24,
+          ),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(18),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(
+              14,
+              14,
+              14,
+              18,
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // --------------------------------------------
+                // HEADER
+                // --------------------------------------------
+                Row(
                   children: [
-                    const Icon(Icons.qr_code_rounded, size: 28, color: AppColors.primaryEmerald),
-                    const SizedBox(width: 12),
-                    Text(
-                      order.orderCode,
-                      style: const TextStyle(
-                        fontSize: 24,
-                        fontWeight: FontWeight.w900,
-                        letterSpacing: 2,
-                        color: AppColors.primaryEmerald,
+                    const Expanded(
+                      child: Text(
+                        'Pickup Ticket',
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.black,
+                        ),
+                      ),
+                    ),
+
+                    IconButton(
+                      onPressed: () {
+                        Navigator.of(ctx).pop();
+                      },
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(
+                        minWidth: 32,
+                        minHeight: 32,
+                      ),
+                      icon: const Icon(
+                        Icons.close,
+                        size: 20,
+                        color: Colors.black87,
                       ),
                     ),
                   ],
                 ),
-              ),
-              const SizedBox(height: 18),
-              Text(
-                order.instructions,
-                textAlign: TextAlign.center,
-                style: const TextStyle(fontSize: 13, color: AppColors.textSecondary, height: 1.4),
-              ),
-              const SizedBox(height: 20),
-              SizedBox(
-                width: double.infinity,
-                height: 48,
-                child: ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primaryEmerald,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+
+                const SizedBox(height: 8),
+
+                // --------------------------------------------
+                // QR + VERIFICATION CODE CARD
+                // --------------------------------------------
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.fromLTRB(
+                    14,
+                    14,
+                    14,
+                    14,
                   ),
-                  onPressed: () => Navigator.of(ctx).pop(),
-                  child: const Text('Close', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF8FAFC),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Column(
+                    children: [
+                      // QR CODE
+                      Container(
+                        width: 116,
+                        height: 116,
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(
+                            color: const Color(0xFFE1E5E9),
+                          ),
+                        ),
+                        child: QrImageView(
+                          data: order.orderCode,
+                          version: QrVersions.auto,
+                          size: 96,
+                          backgroundColor: Colors.white,
+                          eyeStyle: const QrEyeStyle(
+                            eyeShape: QrEyeShape.square,
+                            color: Colors.black,
+                          ),
+                          dataModuleStyle:
+                          const QrDataModuleStyle(
+                            dataModuleShape:
+                            QrDataModuleShape.square,
+                            color: Colors.black,
+                          ),
+                        ),
+                      ),
+
+                      const SizedBox(height: 10),
+
+                      // VERIFICATION CODE LABEL
+                      const Text(
+                        'VERIFICATION CODE',
+                        style: TextStyle(
+                          fontSize: 9,
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: 1.2,
+                          color: Color(0xFF343434),
+                        ),
+                      ),
+
+                      const SizedBox(height: 6),
+
+                      // ACTUAL CODE FROM BACKEND
+                      SelectableText(
+                        order.orderCode,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: 0.7,
+                          color: AppColors.primaryEmerald,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-            ],
+
+                const SizedBox(height: 14),
+
+                Text(
+                  order.title,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.black,
+                  ),
+                ),
+
+                const SizedBox(height: 4),
+
+                // --------------------------------------------
+                // STORE NAME
+                // --------------------------------------------
+                Text(
+                  'from ${order.storeName}',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    fontSize: 10,
+                    color: Color(0xFF555555),
+                  ),
+                ),
+
+                const SizedBox(height: 14),
+
+                // --------------------------------------------
+                // INFORMATION BOX
+                // --------------------------------------------
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 9,
+                  ),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFE1F5E8),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Row(
+                    crossAxisAlignment:
+                    CrossAxisAlignment.start,
+                    children: [
+                      const Icon(
+                        Icons.info_outline,
+                        size: 15,
+                        color: AppColors.primaryEmerald,
+                      ),
+
+                      const SizedBox(width: 7),
+
+                      Expanded(
+                        child: Text(
+                          order.instructions.isNotEmpty
+                              ? order.instructions
+                              : 'Present this ticket code or QR to the donor store for verification upon arrival.',
+                          style: const TextStyle(
+                            fontSize: 9,
+                            height: 1.35,
+                            color: Color(0xFF2E6B45),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 
