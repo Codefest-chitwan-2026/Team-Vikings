@@ -1,6 +1,7 @@
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/widgets.dart';
 import '../core/errors/error_sanitizer.dart';
+import '../core/network/api_client.dart';
 import '../models/business_registration_model.dart';
 import '../models/ngo_model.dart';
 import '../models/user_model.dart';
@@ -17,8 +18,30 @@ class AuthProvider extends ChangeNotifier {
   AuthProvider({
     required IAuthRepository authRepository,
     IProfileRepository? profileRepository,
+    ApiClient? apiClient,
   })  : _authRepository = authRepository,
-        _profileRepository = profileRepository ?? ProfileRepository();
+        _profileRepository = profileRepository ?? ProfileRepository() {
+    // Keep our in-memory token in sync when ApiClient silently refreshes it,
+    // and force a logout if the refresh token itself has expired.
+    apiClient?.onTokensRefreshed = _handleTokensRefreshed;
+    apiClient?.onSessionExpired = _handleSessionExpired;
+  }
+
+  void _handleTokensRefreshed(String newAccessToken, String newRefreshToken) {
+    if (_currentUser == null) return;
+    _currentUser = _currentUser!.copyWith(
+      token: newAccessToken,
+      refreshToken: newRefreshToken,
+    );
+    notifyListeners();
+  }
+
+  void _handleSessionExpired() {
+    _currentUser = null;
+    _status = AuthStatus.unauthenticated;
+    _errorMessage = 'Your session has expired. Please sign in again.';
+    notifyListeners();
+  }
 
   bool _isDisposed = false;
 
@@ -50,9 +73,9 @@ class AuthProvider extends ChangeNotifier {
   UserRole _selectedRole = UserRole.donor;
 
   final List<VerificationDocumentModel> _businessDocuments =
-      VerificationDocumentModel.defaultBusinessDocuments();
+  VerificationDocumentModel.defaultBusinessDocuments();
   final List<VerificationDocumentModel> _ngoDocuments =
-      VerificationDocumentModel.defaultNgoDocuments();
+  VerificationDocumentModel.defaultNgoDocuments();
 
   // Getters
   AuthStatus get status => _status;
@@ -347,9 +370,9 @@ class AuthProvider extends ChangeNotifier {
 
   /// Updates a verification document in state and syncs with backend
   void updateVerificationDocument(
-    VerificationDocumentModel updatedDoc, {
-    UserRole? role,
-  }) {
+      VerificationDocumentModel updatedDoc, {
+        UserRole? role,
+      }) {
     final targetRole = role ?? _currentUser?.role ?? _selectedRole;
     if (targetRole == UserRole.ngo) {
       final index = _ngoDocuments.indexWhere((d) => d.id == updatedDoc.id);
@@ -383,9 +406,9 @@ class AuthProvider extends ChangeNotifier {
 
   /// Adds a new verification document
   void addVerificationDocument(
-    VerificationDocumentModel newDoc, {
-    UserRole? role,
-  }) {
+      VerificationDocumentModel newDoc, {
+        UserRole? role,
+      }) {
     final targetRole = role ?? _currentUser?.role ?? _selectedRole;
     if (targetRole == UserRole.ngo) {
       _ngoDocuments.insert(0, newDoc);

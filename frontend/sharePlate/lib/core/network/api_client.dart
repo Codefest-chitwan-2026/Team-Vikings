@@ -5,11 +5,26 @@ import 'package:http/http.dart' as http;
 import '../constants/api_constants.dart';
 import '../errors/app_exceptions.dart';
 import '../errors/error_sanitizer.dart';
+import '../../services/storage_service.dart';
 
 class ApiClient {
   final http.Client _client;
+  final StorageService? _storageService;
 
-  ApiClient({http.Client? client}) : _client = client ?? http.Client();
+  /// Called after a silent token refresh succeeds, so callers (e.g. AuthProvider)
+  /// can keep their in-memory copy of the access token in sync.
+  void Function(String newAccessToken, String newRefreshToken)? onTokensRefreshed;
+
+  /// Called when the refresh token itself is invalid/expired, meaning the user
+  /// needs to log in again. Callers should use this to force a logout.
+  void Function()? onSessionExpired;
+
+  // Coalesces concurrent refresh attempts into a single in-flight request.
+  Future<String?>? _refreshInFlight;
+
+  ApiClient({http.Client? client, StorageService? storageService})
+      : _client = client ?? http.Client(),
+        _storageService = storageService;
 
   Map<String, String> _buildHeaders({String? token, Map<String, String>? extraHeaders}) {
     final headers = <String, String>{
@@ -25,11 +40,96 @@ class ApiClient {
     return headers;
   }
 
-  Future<dynamic> get(
-    String url, {
-    String? token,
-    Map<String, String>? headers,
+  /// Runs [send] with the given token. If it fails with a 401, attempts a
+  /// silent token refresh and retries exactly once with the new token.
+  Future<dynamic> _sendWithRefresh({
+    required String? token,
+    required Future<dynamic> Function(String? token) send,
   }) async {
+    try {
+      return await send(token);
+    } on UnauthorizedException {
+      if (token == null || token.isEmpty || _storageService == null) {
+        rethrow;
+      }
+      final newToken = await _refreshAccessToken();
+      if (newToken == null) {
+        onSessionExpired?.call();
+        rethrow;
+      }
+      try {
+        return await send(newToken);
+      } on UnauthorizedException {
+        // Even the refreshed token was rejected — the session is truly done.
+        onSessionExpired?.call();
+        rethrow;
+      }
+    }
+  }
+
+  Future<String?> _refreshAccessToken() {
+    // If a refresh is already underway (e.g. several requests hit 401 at
+    // once), share the same attempt instead of firing multiple refreshes.
+    final inFlight = _refreshInFlight;
+    if (inFlight != null) return inFlight;
+
+    final future = _doRefresh();
+    _refreshInFlight = future;
+    future.whenComplete(() {
+      if (identical(_refreshInFlight, future)) {
+        _refreshInFlight = null;
+      }
+    });
+    return future;
+  }
+
+  Future<String?> _doRefresh() async {
+    final refreshToken = _storageService?.getRefreshToken();
+    if (refreshToken == null || refreshToken.isEmpty) return null;
+
+    try {
+      final uri = Uri.parse(ApiConstants.refresh);
+      final response = await _client
+          .post(
+        uri,
+        headers: _buildHeaders(),
+        body: jsonEncode({'refresh': refreshToken}),
+      )
+          .timeout(ApiConstants.connectTimeout);
+
+      if (response.statusCode < 200 || response.statusCode >= 300) return null;
+      if (response.body.isEmpty) return null;
+
+      final decoded = jsonDecode(response.body);
+      if (decoded is! Map<String, dynamic>) return null;
+
+      final newAccess = decoded['access']?.toString();
+      if (newAccess == null || newAccess.isEmpty) return null;
+
+      // Some backends rotate the refresh token on every use; keep the old
+      // one if a new one isn't returned.
+      final newRefresh = decoded['refresh']?.toString() ?? refreshToken;
+
+      await _storageService!.saveTokens(accessToken: newAccess, refreshToken: newRefresh);
+      onTokensRefreshed?.call(newAccess, newRefresh);
+      return newAccess;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<dynamic> get(
+      String url, {
+        String? token,
+        Map<String, String>? headers,
+      }) {
+    return _sendWithRefresh(
+      token: token,
+      send: (t) => _rawGet(url, token: t, headers: headers),
+    );
+  }
+
+  Future<dynamic> _rawGet(String url, {String? token, Map<String, String>? headers}) async {
     try {
       final uri = Uri.parse(url);
       final response = await _client
@@ -47,20 +147,32 @@ class ApiClient {
   }
 
   Future<dynamic> post(
-    String url, {
-    dynamic body,
-    String? token,
-    Map<String, String>? headers,
-  }) async {
+      String url, {
+        dynamic body,
+        String? token,
+        Map<String, String>? headers,
+      }) {
+    return _sendWithRefresh(
+      token: token,
+      send: (t) => _rawPost(url, body: body, token: t, headers: headers),
+    );
+  }
+
+  Future<dynamic> _rawPost(
+      String url, {
+        dynamic body,
+        String? token,
+        Map<String, String>? headers,
+      }) async {
     try {
       final uri = Uri.parse(url);
       final encodedBody = body != null ? jsonEncode(body) : null;
       final response = await _client
           .post(
-            uri,
-            headers: _buildHeaders(token: token, extraHeaders: headers),
-            body: encodedBody,
-          )
+        uri,
+        headers: _buildHeaders(token: token, extraHeaders: headers),
+        body: encodedBody,
+      )
           .timeout(ApiConstants.connectTimeout);
       return _handleResponse(response);
     } on SocketException catch (_) {
@@ -74,20 +186,32 @@ class ApiClient {
   }
 
   Future<dynamic> put(
-    String url, {
-    dynamic body,
-    String? token,
-    Map<String, String>? headers,
-  }) async {
+      String url, {
+        dynamic body,
+        String? token,
+        Map<String, String>? headers,
+      }) {
+    return _sendWithRefresh(
+      token: token,
+      send: (t) => _rawPut(url, body: body, token: t, headers: headers),
+    );
+  }
+
+  Future<dynamic> _rawPut(
+      String url, {
+        dynamic body,
+        String? token,
+        Map<String, String>? headers,
+      }) async {
     try {
       final uri = Uri.parse(url);
       final encodedBody = body != null ? jsonEncode(body) : null;
       final response = await _client
           .put(
-            uri,
-            headers: _buildHeaders(token: token, extraHeaders: headers),
-            body: encodedBody,
-          )
+        uri,
+        headers: _buildHeaders(token: token, extraHeaders: headers),
+        body: encodedBody,
+      )
           .timeout(ApiConstants.connectTimeout);
       return _handleResponse(response);
     } on SocketException catch (_) {
@@ -101,20 +225,32 @@ class ApiClient {
   }
 
   Future<dynamic> patch(
-    String url, {
-    dynamic body,
-    String? token,
-    Map<String, String>? headers,
-  }) async {
+      String url, {
+        dynamic body,
+        String? token,
+        Map<String, String>? headers,
+      }) {
+    return _sendWithRefresh(
+      token: token,
+      send: (t) => _rawPatch(url, body: body, token: t, headers: headers),
+    );
+  }
+
+  Future<dynamic> _rawPatch(
+      String url, {
+        dynamic body,
+        String? token,
+        Map<String, String>? headers,
+      }) async {
     try {
       final uri = Uri.parse(url);
       final encodedBody = body != null ? jsonEncode(body) : null;
       final response = await _client
           .patch(
-            uri,
-            headers: _buildHeaders(token: token, extraHeaders: headers),
-            body: encodedBody,
-          )
+        uri,
+        headers: _buildHeaders(token: token, extraHeaders: headers),
+        body: encodedBody,
+      )
           .timeout(ApiConstants.connectTimeout);
       return _handleResponse(response);
     } on SocketException catch (_) {
@@ -128,10 +264,17 @@ class ApiClient {
   }
 
   Future<dynamic> delete(
-    String url, {
-    String? token,
-    Map<String, String>? headers,
-  }) async {
+      String url, {
+        String? token,
+        Map<String, String>? headers,
+      }) {
+    return _sendWithRefresh(
+      token: token,
+      send: (t) => _rawDelete(url, token: t, headers: headers),
+    );
+  }
+
+  Future<dynamic> _rawDelete(String url, {String? token, Map<String, String>? headers}) async {
     try {
       final uri = Uri.parse(url);
       final response = await _client
@@ -149,12 +292,25 @@ class ApiClient {
   }
 
   Future<dynamic> postMultipart(
-    String url, {
-    required Map<String, String> fields,
-    Map<String, String>? filePaths,
-    String? token,
-    String method = 'POST',
-  }) async {
+      String url, {
+        required Map<String, String> fields,
+        Map<String, String>? filePaths,
+        String? token,
+        String method = 'POST',
+      }) {
+    return _sendWithRefresh(
+      token: token,
+      send: (t) => _rawPostMultipart(url, fields: fields, filePaths: filePaths, token: t, method: method),
+    );
+  }
+
+  Future<dynamic> _rawPostMultipart(
+      String url, {
+        required Map<String, String> fields,
+        Map<String, String>? filePaths,
+        String? token,
+        String method = 'POST',
+      }) async {
     try {
       final uri = Uri.parse(url);
       final request = http.MultipartRequest(method, uri);
@@ -194,11 +350,11 @@ class ApiClient {
   }
 
   Future<dynamic> patchMultipart(
-    String url, {
-    required Map<String, String> fields,
-    Map<String, String>? filePaths,
-    String? token,
-  }) {
+      String url, {
+        required Map<String, String> fields,
+        Map<String, String>? filePaths,
+        String? token,
+      }) {
     return postMultipart(url, fields: fields, filePaths: filePaths, token: token, method: 'PATCH');
   }
 

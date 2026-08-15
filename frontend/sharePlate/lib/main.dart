@@ -32,7 +32,7 @@ void main() async {
 
   // 1. Initialize Network Client & Storage Service
   final storageService = await StorageService.init();
-  final apiClient = ApiClient();
+  final apiClient = ApiClient(storageService: storageService);
 
   // 2. Initialize Service Layer
   final authApiService = AuthApiService(client: apiClient);
@@ -64,6 +64,7 @@ void main() async {
           create: (_) => AuthProvider(
             authRepository: authRepository,
             profileRepository: profileRepository,
+            apiClient: apiClient,
           ),
         ),
         ChangeNotifierProvider<DonationProvider>(
