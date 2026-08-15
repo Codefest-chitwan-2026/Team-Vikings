@@ -30,6 +30,7 @@ class ApiConstants {
   // Auth endpoints matching Django authentication app URLs
   static String get login => '$baseUrl/api/auth/login/';
   static String get logout => '$baseUrl/api/auth/logout/';
+  static String get refresh => '$baseUrl/api/auth/refresh/';
   static String get registerCustomer => '$baseUrl/api/auth/register/customer/';
   static String get registerBusiness => '$baseUrl/api/auth/register/business/';
   static String get registerNgo => '$baseUrl/api/auth/register/ngo/';

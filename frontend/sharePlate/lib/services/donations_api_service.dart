@@ -6,6 +6,24 @@ class DonationsApiService {
 
   DonationsApiService({ApiClient? apiClient}) : _apiClient = apiClient ?? ApiClient();
 
+  /// Normalizes a list-endpoint response into a plain List.
+  ///
+  /// Some backends (e.g. Django REST Framework with pagination enabled)
+  /// don't return a raw JSON array for list endpoints — they wrap it in an
+  /// object like `{ "count": 3, "next": null, "previous": null, "results": [...] }`.
+  /// Previously this code only handled the raw-array case and silently
+  /// returned an empty list for the paginated shape, even when the backend
+  /// had real data — which hid every donation from screens like the NGO
+  /// priority feed despite the rows existing in the database.
+  List<dynamic> _asList(dynamic response) {
+    if (response is List) return response;
+    if (response is Map<String, dynamic>) {
+      final results = response['results'];
+      if (results is List) return results;
+    }
+    return [];
+  }
+
   /// GET /api/donations/ with optional filters
   Future<List<dynamic>> getDonations({
     required String token,
@@ -31,7 +49,7 @@ class DonationsApiService {
     }
 
     final response = await _apiClient.get(url, token: token);
-    return response is List ? response : [];
+    return _asList(response);
   }
 
   /// POST /api/donations/ (Create donation or flash sale)
@@ -77,7 +95,7 @@ class DonationsApiService {
       ApiConstants.ngoPriority,
       token: token,
     );
-    return response is List ? response : [];
+    return _asList(response);
   }
 
   /// GET /api/donations/flash_sales/
@@ -86,7 +104,7 @@ class DonationsApiService {
       ApiConstants.flashSales,
       token: token,
     );
-    return response is List ? response : [];
+    return _asList(response);
   }
 
   /// POST /api/donations/{id}/claim/
@@ -162,7 +180,7 @@ class DonationsApiService {
       ApiConstants.claims,
       token: token,
     );
-    return response is List ? response : [];
+    return _asList(response);
   }
 
   /// GET /api/reservations/
@@ -171,6 +189,6 @@ class DonationsApiService {
       ApiConstants.reservations,
       token: token,
     );
-    return response is List ? response : [];
+    return _asList(response);
   }
 }

@@ -112,15 +112,32 @@ class DonationItem {
 
     DonationStatus donStatus;
     bool active;
-    if (rawStatus == 'AVAILABLE') {
-      donStatus = DonationStatus.awaitingClaim;
-      active = true;
-    } else if (rawStatus == 'CLAIMED' || rawStatus == 'RESERVED' || rawStatus == 'NGO_EN_ROUTE') {
+    const terminalStatuses = {
+      'COMPLETED',
+      'CANCELLED',
+      'CANCELED',
+      'EXPIRED',
+      'DELIVERED',
+      'PICKED_UP',
+      'REJECTED',
+    };
+    if (rawStatus == 'CLAIMED' || rawStatus == 'RESERVED' || rawStatus == 'NGO_EN_ROUTE') {
       donStatus = DonationStatus.ngoEnRoute;
       active = true;
-    } else {
+    } else if (terminalStatuses.contains(rawStatus)) {
       donStatus = DonationStatus.completed;
       active = false;
+    } else {
+      // Anything else — AVAILABLE, ACTIVE, OPEN, PENDING, or any other status
+      // string the backend might use for a freshly created, unclaimed
+      // listing — should still show up as an open listing. Previously this
+      // fell into the `else` branch and was marked completed/inactive,
+      // which silently hid brand-new donations from the NGO priority feed
+      // (and everywhere else that filters on `isActive`/`available`) any
+      // time the backend's status string wasn't the exact literal
+      // 'AVAILABLE'.
+      donStatus = DonationStatus.awaitingClaim;
+      active = true;
     }
 
     final claimMap = json['claim'] is Map<String, dynamic> ? json['claim'] as Map<String, dynamic> : null;
