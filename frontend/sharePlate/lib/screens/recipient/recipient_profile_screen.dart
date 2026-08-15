@@ -48,11 +48,13 @@ class RecipientProfileScreen extends StatelessWidget {
 
     final orgName = user?.organizationName != null && user!.organizationName!.isNotEmpty
         ? user.organizationName!
-        : (user?.displayName.isNotEmpty == true ? user!.displayName : 'Aasha Foundation');
+        : (user != null && user.displayName.isNotEmpty
+            ? user.displayName
+            : (user?.email ?? 'NGO Organization'));
     final orgSubtitle = user?.email.isNotEmpty == true
         ? 'Recipient · ${user!.email}'
         : 'Recipient · NGO';
-    final initials = user?.initials ?? 'AF';
+    final initials = user?.initials ?? 'NG';
     final avatarPath = user?.profileData?['avatar_path'] as String?;
 
     return SafeArea(

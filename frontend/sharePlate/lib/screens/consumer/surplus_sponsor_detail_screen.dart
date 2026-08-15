@@ -5,6 +5,7 @@ import '../../core/constants/app_colors.dart';
 import '../../models/donation_model.dart';
 import '../../models/surplus_sponsor_model.dart';
 import '../../providers/auth_provider.dart';
+import '../../providers/sponsorship_provider.dart';
 
 class SurplusSponsorDetailScreen extends StatefulWidget {
   const SurplusSponsorDetailScreen({
@@ -41,11 +42,11 @@ class _SurplusSponsorDetailScreenState
 
   Future<void> _handleSponsor() async {
     setState(() => _isProcessing = true);
-    await Future.delayed(const Duration(milliseconds: 700));
-    if (!mounted) return;
 
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    final sponsorshipProvider = Provider.of<SponsorshipProvider>(context, listen: false);
     final user = authProvider.currentUser;
+    final token = user?.token;
     final userName = user?.displayName.isNotEmpty == true
         ? user!.displayName
         : (user?.name.isNotEmpty == true ? user!.name : 'Rojina Shrestha');
@@ -53,6 +54,21 @@ class _SurplusSponsorDetailScreenState
     final dedication = _dedicationController.text.trim().isNotEmpty
         ? _dedicationController.text.trim()
         : (_isAnonymous ? 'Anonymous Sponsor' : 'Dedicated by $userName');
+
+    if (token != null && token.isNotEmpty) {
+      await sponsorshipProvider.createSponsorship(
+        token: token,
+        surplusItemId: widget.item.id,
+        foodTitle: widget.item.foodTitle,
+        donorName: widget.item.donorName,
+        mealsCount: _mealsCount,
+        amount: _totalSponsorPrice,
+        originalValue: _totalOriginalValue,
+        dedication: dedication,
+      );
+    }
+
+    if (!mounted) return;
 
     final sponsorshipData = {
       'id': 'SPN-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}',

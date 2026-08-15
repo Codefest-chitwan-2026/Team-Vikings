@@ -11,6 +11,7 @@ import '../../widgets/donor/donation/donation_card.dart';
 import '../../widgets/donor/donation/donation_tab_selector.dart';
 import 'donation_detail_screen.dart';
 import 'donation_receipt_screen.dart';
+import '../../widgets/shared/empty_state_widget.dart';
 
 class MyDonationsScreen extends StatefulWidget {
   const MyDonationsScreen({super.key});
@@ -107,16 +108,22 @@ class _MyDonationsScreenState extends State<MyDonationsScreen> {
               backgroundColor: AppColors.error,
               foregroundColor: Colors.white,
             ),
-            onPressed: () {
+            onPressed: () async {
               Navigator.of(ctx).pop();
               final auth = context.read<AuthProvider>();
-              context.read<DonationProvider>().cancelDonationOnApi(
+              final donationProvider = context.read<DonationProvider>();
+              final success = await donationProvider.cancelDonationOnApi(
                 token: auth.currentUser?.token,
                 donationId: donation.id,
               );
+              if (!mounted) return;
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Donation listing cancelled.'),
+                SnackBar(
+                  content: Text(
+                    success
+                        ? 'Donation listing cancelled.'
+                        : (donationProvider.errorMessage ?? 'Unable to cancel donation. Please try again.'),
+                  ),
                   backgroundColor: AppColors.error,
                 ),
               );
@@ -172,52 +179,42 @@ class _MyDonationsScreenState extends State<MyDonationsScreen> {
                 onRefresh: _refreshDonations,
                 color: AppColors.primaryEmerald,
                 child: visibleDonations.isEmpty
-                    ? ListView(
-                        children: [
-                          SizedBox(height: MediaQuery.sizeOf(context).height * 0.2),
-                          Center(
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(Icons.inventory_2_outlined, size: 54, color: AppColors.textSecondary.withValues(alpha: 0.4)),
-                                const SizedBox(height: 12),
-                                Text(
-                                  _selectedTab == 0 ? 'No active donations right now' : 'No past donation history',
-                                  style: const TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.bold,
-                                    color: AppColors.textPrimary,
-                                  ),
-                                ),
-                                const SizedBox(height: 4),
-                                const Text(
-                                  'Tap the + button below to post surplus meals.',
-                                  style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      )
+                    ? Center(
+                  child: EmptyStateWidget(
+                    icon: Icons.inventory_2_outlined,
+                    title: _selectedTab == 0
+                        ? 'No Active Food Listings'
+                        : 'No Past Donation History',
+                    description: _selectedTab == 0
+                        ? 'You currently have no active surplus food listings. Post fresh surplus food to connect with verified NGOs or list flash deals.'
+                        : 'Your completed, collected, and archived food donations will appear here for historical tracking.',
+                    buttonText: _selectedTab == 0
+                        ? 'Create Food Donation'
+                        : null,
+                    buttonIcon: Icons.add,
+                    onButtonPressed:
+                    _selectedTab == 0 ? _openAddDonation : null,
+                  ),
+                )
                     : ListView.separated(
-                        padding: const EdgeInsets.fromLTRB(20, 16, 20, 100),
-                        itemCount: visibleDonations.length,
-                        separatorBuilder: (context, index) => const SizedBox(height: 12),
-                        itemBuilder: (context, index) {
-                          final donation = visibleDonations[index];
-                          return DonationCard(
-                            donation: donation,
-                            onCardTap: () {
-                              Navigator.of(context).push(
-                                MaterialPageRoute(
-                                  builder: (_) => DonationDetailScreen(donation: donation),
-                                ),
-                              );
-                            },
-                            onActionTap: (action) => _handleAction(donation, action),
-                          );
-                        },
-                      ),
+                  padding: const EdgeInsets.fromLTRB(20, 16, 20, 100),
+                  itemCount: visibleDonations.length,
+                  separatorBuilder: (context, index) => const SizedBox(height: 12),
+                  itemBuilder: (context, index) {
+                    final donation = visibleDonations[index];
+                    return DonationCard(
+                      donation: donation,
+                      onCardTap: () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => DonationDetailScreen(donation: donation),
+                          ),
+                        );
+                      },
+                      onActionTap: (action) => _handleAction(donation, action),
+                    );
+                  },
+                ),
               ),
             ),
           ],

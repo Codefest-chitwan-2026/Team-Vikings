@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 import '../../core/constants/app_colors.dart';
-import '../../models/notification_model.dart';
+import '../../providers/auth_provider.dart';
+import '../../providers/notification_provider.dart';
 import '../../widgets/shared/notification_tile.dart';
 
-/// Notifications screen shown to a consumer (customer).
 class ConsumerNotificationsScreen extends StatefulWidget {
   const ConsumerNotificationsScreen({super.key});
 
@@ -17,41 +18,35 @@ class _ConsumerNotificationsScreenState
     extends State<ConsumerNotificationsScreen> {
   bool _showOnlyUnread = false;
 
-  final List<NotificationItem> _notifications = [
-    const NotificationItem(
-      title: 'Order confirmed',
-      message: 'Your flash-sale pastry box from Cafe Norling is confirmed.',
-      timeAgo: '3m',
-      type: NotificationType.success,
-    ),
-    const NotificationItem(
-      title: 'Pickup window closing soon',
-      message: 'Pick up your rice & curry box in the next 10 minutes.',
-      timeAgo: '12m',
-      type: NotificationType.alert,
-    ),
-    const NotificationItem(
-      title: 'New deal nearby',
-      message: 'Hotel Barahi just listed a 60% off dinner box, 0.7 km away.',
-      timeAgo: '30m',
-      type: NotificationType.info,
-    ),
-    const NotificationItem(
-      title: 'Order picked up',
-      message: 'Your order from Chitwan Black Forest was marked collected.',
-      timeAgo: '2h',
-      type: NotificationType.pickup,
-    ),
-    const NotificationItem(
-      title: 'Weekly savings summary',
-      message: "You've saved Rs 850 and rescued 6 kg of food this week.",
-      timeAgo: '1d',
-      type: NotificationType.summary,
-    ),
-  ];
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _fetch();
+    });
+  }
+
+  Future<void> _fetch() async {
+    final auth = context.read<AuthProvider>();
+    final token = auth.currentUser?.token;
+    if (token != null && token.isNotEmpty) {
+      await context.read<NotificationProvider>().fetchNotifications(token: token);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
+    final notifProvider = context.watch<NotificationProvider>();
+    final auth = context.watch<AuthProvider>();
+    final token = auth.currentUser?.token;
+
+    final notifications = notifProvider.notifications;
+    final unreadCount = notifProvider.unreadCount;
+
+    final displayedNotifications = _showOnlyUnread
+        ? notifications.where((n) => !n.isRead).toList()
+        : notifications;
+
     final canPop = Navigator.of(context).canPop();
 
     return Scaffold(
@@ -81,6 +76,9 @@ class _ConsumerNotificationsScreenState
             icon: const Icon(Icons.done_all_rounded,
                 color: AppColors.primaryEmerald),
             onPressed: () {
+              if (token != null && token.isNotEmpty) {
+                notifProvider.markAllAsRead(token: token);
+              }
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(
                   content: Text('All notifications marked as read'),
@@ -92,52 +90,59 @@ class _ConsumerNotificationsScreenState
         ],
       ),
       body: SafeArea(
-        child: Column(
-          children: [
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-              child: Row(
-                children: [
-                  ChoiceChip(
-                    label: Text('All (${_notifications.length})'),
-                    selected: !_showOnlyUnread,
-                    onSelected: (val) =>
-                        setState(() => _showOnlyUnread = false),
-                    selectedColor: AppColors.primaryEmerald.withValues(alpha: 0.15),
-                    labelStyle: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: !_showOnlyUnread
-                          ? AppColors.primaryEmerald
-                          : AppColors.textSecondary,
+        child: RefreshIndicator(
+          onRefresh: _fetch,
+          color: AppColors.primaryEmerald,
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                child: Row(
+                  children: [
+                    ChoiceChip(
+                      label: Text('All (${notifications.length})'),
+                      selected: !_showOnlyUnread,
+                      onSelected: (val) =>
+                          setState(() => _showOnlyUnread = false),
+                      selectedColor: AppColors.primaryEmerald.withValues(alpha: 0.15),
+                      labelStyle: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: !_showOnlyUnread
+                            ? AppColors.primaryEmerald
+                            : AppColors.textSecondary,
+                      ),
                     ),
-                  ),
-                  const SizedBox(width: 8),
-                  ChoiceChip(
-                    label: const Text('Unread (2)'),
-                    selected: _showOnlyUnread,
-                    onSelected: (val) =>
-                        setState(() => _showOnlyUnread = true),
-                    selectedColor: AppColors.primaryEmerald.withValues(alpha: 0.15),
-                    labelStyle: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: _showOnlyUnread
-                          ? AppColors.primaryEmerald
-                          : AppColors.textSecondary,
+                    const SizedBox(width: 8),
+                    ChoiceChip(
+                      label: Text('Unread ($unreadCount)'),
+                      selected: _showOnlyUnread,
+                      onSelected: (val) =>
+                          setState(() => _showOnlyUnread = true),
+                      selectedColor: AppColors.primaryEmerald.withValues(alpha: 0.15),
+                      labelStyle: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: _showOnlyUnread
+                            ? AppColors.primaryEmerald
+                            : AppColors.textSecondary,
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
-            ),
-            Expanded(
-              child: NotificationListView(
-                items: _showOnlyUnread
-                    ? _notifications.take(2).toList()
-                    : _notifications,
+              Expanded(
+                child: NotificationListView(
+                  items: displayedNotifications,
+                  onItemTap: (item) {
+                    if (token != null && token.isNotEmpty && item.id.isNotEmpty) {
+                      notifProvider.markAsRead(token: token, id: item.id);
+                    }
+                  },
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

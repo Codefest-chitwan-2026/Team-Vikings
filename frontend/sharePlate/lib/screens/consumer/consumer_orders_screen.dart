@@ -1,48 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../../core/constants/app_colors.dart';
-import '../../models/donation_model.dart';
+import '../../models/consumer_order_model.dart';
+import '../../providers/auth_provider.dart';
+import '../../providers/order_provider.dart';
+import '../../widgets/shared/empty_state_widget.dart';
 
 enum _OrderFilter { all, active, completed }
-
-enum OrderStatus { readyForPickup, completed }
-
-class _ConsumerOrder {
-  final String id;
-  final String title;
-  final String storeName;
-  final String storePhone;
-  final String pickupAddress;
-  final double distanceKm;
-  final double originalPrice;
-  final double discountedPrice;
-  final FoodCategory category;
-  final String orderCode;
-  final DateTime orderTime;
-  final int pickupWindowMinutes;
-  final String instructions;
-  OrderStatus status;
-
-  _ConsumerOrder({
-    required this.id,
-    required this.title,
-    required this.storeName,
-    required this.storePhone,
-    required this.pickupAddress,
-    required this.distanceKm,
-    required this.originalPrice,
-    required this.discountedPrice,
-    required this.category,
-    required this.orderCode,
-    required this.orderTime,
-    required this.pickupWindowMinutes,
-    required this.instructions,
-    this.status = OrderStatus.readyForPickup,
-  });
-
-  bool get isActive => status == OrderStatus.readyForPickup;
-
-  double get savedAmount => originalPrice - discountedPrice;
-}
 
 class ConsumerOrdersScreen extends StatefulWidget {
   const ConsumerOrdersScreen({super.key});
@@ -55,65 +19,26 @@ class _ConsumerOrdersScreenState extends State<ConsumerOrdersScreen> {
   _OrderFilter _selectedFilter = _OrderFilter.all;
   String _searchQuery = '';
 
-  late List<_ConsumerOrder> _orders;
-
   @override
   void initState() {
     super.initState();
-    _orders = [
-      _ConsumerOrder(
-        id: 'ord-1',
-        title: 'Assorted Gourmet Pastry Box (4 pcs)',
-        storeName: 'Chitwan Black Forest Cafe',
-        storePhone: '9855012345',
-        pickupAddress: 'Narayangarh Chowk, Chitwan',
-        distanceKm: 0.8,
-        originalPrice: 450,
-        discountedPrice: 180,
-        category: FoodCategory.veg,
-        orderCode: 'ORD-5542',
-        orderTime: DateTime.now().subtract(const Duration(minutes: 20)),
-        pickupWindowMinutes: 40,
-        instructions: 'Show your order code at the cash counter to collect your fresh box.',
-        status: OrderStatus.readyForPickup,
-      ),
-      _ConsumerOrder(
-        id: 'ord-2',
-        title: 'Deluxe Chicken Biryani Bowl & Raita',
-        storeName: 'Himalayan Grill & Kitchen',
-        storePhone: '9841987654',
-        pickupAddress: 'Bharatpur Height-10, Chitwan',
-        distanceKm: 2.1,
-        originalPrice: 380,
-        discountedPrice: 150,
-        category: FoodCategory.nonVeg,
-        orderCode: 'ORD-9812',
-        orderTime: DateTime.now().subtract(const Duration(minutes: 45)),
-        pickupWindowMinutes: 50,
-        instructions: 'Packed hot and ready at the takeaway pickup station.',
-        status: OrderStatus.readyForPickup,
-      ),
-      _ConsumerOrder(
-        id: 'ord-3',
-        title: 'Freshly Baked Artisanal Sourdough Bread',
-        storeName: 'The French Bakery',
-        storePhone: '9801234888',
-        pickupAddress: 'Lions Chowk, Narayangarh',
-        distanceKm: 1.5,
-        originalPrice: 280,
-        discountedPrice: 99,
-        category: FoodCategory.veg,
-        orderCode: 'ORD-1049',
-        orderTime: DateTime.now().subtract(const Duration(hours: 4)),
-        pickupWindowMinutes: 60,
-        instructions: 'Collected with verified order code.',
-        status: OrderStatus.completed,
-      ),
-    ];
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _refresh();
+    });
   }
 
-  List<_ConsumerOrder> get _filteredOrders {
-    return _orders.where((order) {
+  Future<void> _refresh() async {
+    final auth = context.read<AuthProvider>();
+    final token = auth.currentUser?.token;
+    if (token != null && token.isNotEmpty) {
+      await context.read<OrderProvider>().fetchOrders(token: token);
+    }
+  }
+
+  List<ConsumerOrderModel> _getOrders(OrderProvider provider) {
+    final orders = provider.orders;
+
+    return orders.where((order) {
       if (_selectedFilter == _OrderFilter.active && !order.isActive) {
         return false;
       }
@@ -129,7 +54,7 @@ class _ConsumerOrdersScreenState extends State<ConsumerOrdersScreen> {
     }).toList();
   }
 
-  void _showPickupDetails(_ConsumerOrder order) {
+  void _showPickupDetails(ConsumerOrderModel order) {
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
@@ -219,152 +144,131 @@ class _ConsumerOrdersScreenState extends State<ConsumerOrdersScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final orders = _filteredOrders;
-    final activeCount = _orders.where((o) => o.isActive).length;
-    final completedCount = _orders.where((o) => !o.isActive).length;
+    final orderProvider = context.watch<OrderProvider>();
+    final orders = _getOrders(orderProvider);
+    final allOrders = orderProvider.orders.isNotEmpty ? orderProvider.orders : orders;
+    final activeCount = allOrders.where((o) => o.isActive).length;
+    final completedCount = allOrders.where((o) => !o.isActive).length;
 
     return SafeArea(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          // Header
-          Padding(
-            padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    const Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'My Orders & Claims',
-                          style: TextStyle(
-                            fontSize: 22,
-                            fontWeight: FontWeight.bold,
-                            color: AppColors.textPrimary,
-                          ),
-                        ),
-                        SizedBox(height: 2),
-                        Text(
-                          'Reserved discount deals & flash sale pickups',
-                          style: TextStyle(
-                            fontSize: 13,
-                            color: AppColors.textSecondary,
-                          ),
-                        ),
-                      ],
-                    ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: AppColors.primaryEmerald.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(
-                          color: AppColors.primaryEmerald.withValues(alpha: 0.3),
-                        ),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
+      child: RefreshIndicator(
+        onRefresh: _refresh,
+        color: AppColors.primaryEmerald,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Icon(Icons.shopping_bag_outlined,
-                              size: 15, color: AppColors.primaryEmerald),
-                          const SizedBox(width: 5),
                           Text(
-                            '$activeCount Active',
-                            style: const TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.bold,
-                              color: AppColors.primaryEmerald,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-
-                // Search Bar
-                TextField(
-                  onChanged: (v) => setState(() => _searchQuery = v),
-                  decoration: InputDecoration(
-                    hintText: 'Search orders or food items...',
-                    hintStyle: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
-                    prefixIcon: const Icon(Icons.search, size: 20, color: AppColors.textSecondary),
-                    filled: true,
-                    fillColor: const Color(0xFFF3F4F6),
-                    contentPadding: const EdgeInsets.symmetric(vertical: 0, horizontal: 16),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: BorderSide.none,
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 12),
-
-                // Filter Buttons
-                Row(
-                  children: [
-                    _filterButton('All (${_orders.length})', _OrderFilter.all),
-                    const SizedBox(width: 8),
-                    _filterButton('Active Pickups ($activeCount)', _OrderFilter.active),
-                    const SizedBox(width: 8),
-                    _filterButton('Past Orders ($completedCount)', _OrderFilter.completed),
-                  ],
-                ),
-              ],
-            ),
-          ),
-
-          const SizedBox(height: 12),
-
-          // Orders List
-          Expanded(
-            child: orders.isEmpty
-                ? Center(
-                    child: Padding(
-                      padding: const EdgeInsets.all(32),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            Icons.receipt_long_outlined,
-                            size: 48,
-                            color: AppColors.textSecondary.withValues(alpha: 0.5),
-                          ),
-                          const SizedBox(height: 12),
-                          const Text(
-                            'No orders or claims found',
+                            'My Orders & Claims',
                             style: TextStyle(
-                              fontSize: 15,
+                              fontSize: 22,
                               fontWeight: FontWeight.bold,
                               color: AppColors.textPrimary,
                             ),
                           ),
-                          const SizedBox(height: 4),
-                          const Text(
-                            'Explore Flash Deals from local cafes and bakeries to save food and money.',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
+                          SizedBox(height: 2),
+                          Text(
+                            'Reserved discount deals & flash sale pickups',
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: AppColors.textSecondary,
+                            ),
                           ),
                         ],
                       ),
-                    ),
-                  )
-                : ListView.separated(
-                    padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
-                    itemCount: orders.length,
-                    separatorBuilder: (_, _) => const SizedBox(height: 14),
-                    itemBuilder: (context, index) {
-                      final order = orders[index];
-                      return _buildOrderCard(order);
-                    },
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: AppColors.primaryEmerald.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(
+                            color: AppColors.primaryEmerald.withValues(alpha: 0.3),
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.shopping_bag_outlined,
+                                size: 15, color: AppColors.primaryEmerald),
+                            const SizedBox(width: 5),
+                            Text(
+                              '$activeCount Active',
+                              style: const TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                                color: AppColors.primaryEmerald,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                   ),
-          ),
-        ],
+                  const SizedBox(height: 16),
+                  TextField(
+                    onChanged: (v) => setState(() => _searchQuery = v),
+                    decoration: InputDecoration(
+                      hintText: 'Search orders or food items...',
+                      hintStyle: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
+                      prefixIcon: const Icon(Icons.search, size: 20, color: AppColors.textSecondary),
+                      filled: true,
+                      fillColor: const Color(0xFFF3F4F6),
+                      contentPadding: const EdgeInsets.symmetric(vertical: 0, horizontal: 16),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide.none,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      _filterButton('All (${allOrders.length})', _OrderFilter.all),
+                      const SizedBox(width: 8),
+                      _filterButton('Active Pickups ($activeCount)', _OrderFilter.active),
+                      const SizedBox(width: 8),
+                      _filterButton('Past Orders ($completedCount)', _OrderFilter.completed),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+            Expanded(
+              child: orders.isEmpty
+                  ? Center(
+                      child: EmptyStateWidget(
+                        icon: Icons.receipt_long_outlined,
+                        title: 'No Orders Yet',
+                        description:
+                            'You haven\'t reserved any surplus discount deals yet. Explore Flash Deals to save money and prevent food waste!',
+                        buttonText: 'Refresh Orders',
+                        buttonIcon: Icons.refresh_rounded,
+                        onButtonPressed: _refresh,
+                      ),
+                    )
+                  : ListView.separated(
+                      padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
+                      itemCount: orders.length,
+                      separatorBuilder: (_, _) => const SizedBox(height: 14),
+                      itemBuilder: (context, index) {
+                        final order = orders[index];
+                        return _buildOrderCard(order);
+                      },
+                    ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -399,7 +303,7 @@ class _ConsumerOrdersScreenState extends State<ConsumerOrdersScreen> {
     );
   }
 
-  Widget _buildOrderCard(_ConsumerOrder order) {
+  Widget _buildOrderCard(ConsumerOrderModel order) {
     final isActive = order.isActive;
 
     return Container(
@@ -425,7 +329,6 @@ class _ConsumerOrdersScreenState extends State<ConsumerOrdersScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Status Row
             Row(
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
@@ -466,8 +369,6 @@ class _ConsumerOrdersScreenState extends State<ConsumerOrdersScreen> {
               ],
             ),
             const SizedBox(height: 12),
-
-            // Item Title
             Text(
               order.title,
               style: const TextStyle(
@@ -477,8 +378,6 @@ class _ConsumerOrdersScreenState extends State<ConsumerOrdersScreen> {
               ),
             ),
             const SizedBox(height: 6),
-
-            // Price & Savings
             Row(
               children: [
                 Text(
@@ -517,8 +416,6 @@ class _ConsumerOrdersScreenState extends State<ConsumerOrdersScreen> {
               ],
             ),
             const SizedBox(height: 10),
-
-            // Store Info
             Container(
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
@@ -571,7 +468,6 @@ class _ConsumerOrdersScreenState extends State<ConsumerOrdersScreen> {
                 ],
               ),
             ),
-
             if (isActive) ...[
               const SizedBox(height: 12),
               Row(
@@ -598,6 +494,7 @@ class _ConsumerOrdersScreenState extends State<ConsumerOrdersScreen> {
                   Expanded(
                     child: ElevatedButton.icon(
                       onPressed: () {
+                        context.read<OrderProvider>().markOrderCompleted(order.id);
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(
                             content: Text('Order "${order.title}" marked as received'),

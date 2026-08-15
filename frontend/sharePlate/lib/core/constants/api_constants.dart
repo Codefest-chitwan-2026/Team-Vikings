@@ -37,6 +37,8 @@ class ApiConstants {
 
   // Profiles endpoints
   static String get profileMe => '$baseUrl/api/profiles/me/';
+  static String get profileDocuments => '$baseUrl/api/profiles/documents/';
+  static String get nearbyNgos => '$baseUrl/api/profiles/nearby-ngos/';
 
   // Donations endpoints
   static String get donations => '$baseUrl/api/donations/';
@@ -51,10 +53,40 @@ class ApiConstants {
   static String get claims => '$baseUrl/api/claims/';
   static String get reservations => '$baseUrl/api/reservations/';
 
+  // Orders endpoints
+  static String get orders => '$baseUrl/api/orders/';
+  static String orderDetail(dynamic id) => '$baseUrl/api/orders/$id/';
+
+  // Sponsorships endpoints
+  static String get sponsorshipItems => '$baseUrl/api/sponsorship-items/';
+  static String get sponsorships => '$baseUrl/api/sponsorships/';
+
+  // Contributions endpoints
+  static String get contributions => '$baseUrl/api/contributions/';
+  static String contributionDetail(dynamic id) => '$baseUrl/api/contributions/$id/';
+
+  // Notifications endpoints
+  static String get notifications => '$baseUrl/api/notifications/';
+  static String notificationRead(dynamic id) => '$baseUrl/api/notifications/$id/read/';
+  static String get notificationReadAll => '$baseUrl/api/notifications/read-all/';
+  static String get notificationSettings => '$baseUrl/api/notification-settings/';
+
   // Listing Flow endpoints
   static String get listingFlow => '$baseUrl/api/listing-flow/';
+  static String listingFlowDetail(dynamic id) => '$baseUrl/api/listing-flow/$id/detail/';
+  static String listingFlowListingDetail(dynamic id) => '$baseUrl/api/listing-flow/$id/listing-detail/';
+  static String listingFlowUpdate(dynamic id) => '$baseUrl/api/listing-flow/$id/listing-update/';
+  static String listingFlowAdjustPrice(dynamic id) => '$baseUrl/api/listing-flow/$id/adjust-price/';
+  static String listingFlowKeepDonationOnly(dynamic id) => '$baseUrl/api/listing-flow/$id/keep-donation-only/';
+  static String listingFlowProcessPriorityExpiry(dynamic id) => '$baseUrl/api/listing-flow/$id/process-priority-expiry/';
   static String get claimHolds => '$baseUrl/api/claim-holds/';
+  static String claimHoldConfirm(dynamic id) => '$baseUrl/api/claim-holds/$id/confirm/';
+  static String claimHoldCancel(dynamic id) => '$baseUrl/api/claim-holds/$id/cancel/';
   static String get pickupQr => '$baseUrl/api/pickup-qr/';
+  static String pickupQrByClaim(dynamic claimId) => '$baseUrl/api/pickup-qr/by-claim/$claimId/';
+  static String pickupQrByTicket(dynamic ticketId) => '$baseUrl/api/pickup-qr/by-ticket/$ticketId/';
+  static String get verifyPickupEndpoint => '$baseUrl/api/verify-pickup/';
+  static String verifyPickupExpected(String code) => '$baseUrl/api/verify-pickup/expected/$code/';
 
   // Timeouts
   static const Duration connectTimeout = Duration(seconds: 15);

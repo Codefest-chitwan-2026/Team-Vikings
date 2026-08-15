@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../../core/constants/app_colors.dart';
 import '../../models/contribution_model.dart';
+import '../../providers/auth_provider.dart';
 import '../../providers/donation_provider.dart';
 import '../../widgets/donor/donor_bottom_navigation.dart';
 import 'contribution_detail_screen.dart';
@@ -31,6 +32,17 @@ class _DonorHomeScreenState extends State<DonorHomeScreen> {
   void initState() {
     super.initState();
     _selectedTab = widget.initialTab;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final auth = context.read<AuthProvider>();
+      final token = auth.currentUser?.token;
+      if (token != null && token.isNotEmpty) {
+        final dp = context.read<DonationProvider>();
+        dp.fetchDonations(token: token);
+        dp.fetchContributions(token: token);
+        dp.fetchNearbyNgos();
+        dp.fetchClaims(token: token);
+      }
+    });
   }
 
   void _onTabSelected(int index) {
@@ -90,13 +102,8 @@ class _DonorHomeTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final donationProvider = context.watch<DonationProvider>();
-    final recentContribution = donationProvider.contributions.isNotEmpty
-        ? donationProvider.contributions.first
-        : ContributionItem.mockContributions.first;
-
+    final contributions = donationProvider.contributions;
     final ngos = donationProvider.nearbyNgos;
-    final firstNgo = ngos.isNotEmpty ? ngos[0] : ngo_model.NearbyNgo.mockNgos[0];
-    final secondNgo = ngos.length > 1 ? ngos[1] : ngo_model.NearbyNgo.mockNgos[1];
 
     return SafeArea(
       child: LayoutBuilder(
@@ -133,18 +140,69 @@ class _DonorHomeTab extends StatelessWidget {
                       const SizedBox(height: 8),
                       Expanded(
                         flex: 2,
-                        child: _ContributionCard(
-                          contribution: recentContribution,
-                          onTap: () {
-                            Navigator.of(context).push(
-                              MaterialPageRoute(
-                                builder: (_) => ContributionDetailScreen(
-                                  contribution: recentContribution,
+                        child: contributions.isNotEmpty
+                            ? _ContributionCard(
+                                contribution: contributions.first,
+                                onTap: () {
+                                  Navigator.of(context).push(
+                                    MaterialPageRoute(
+                                      builder: (_) => ContributionDetailScreen(
+                                        contribution: contributions.first,
+                                      ),
+                                    ),
+                                  );
+                                },
+                              )
+                            : Container(
+                                padding: const EdgeInsets.all(16),
+                                decoration: BoxDecoration(
+                                  color: AppColors.surface,
+                                  borderRadius: BorderRadius.circular(14),
+                                  border: Border.all(color: AppColors.border),
+                                ),
+                                child: Row(
+                                  children: [
+                                    Container(
+                                      width: 48,
+                                      height: 48,
+                                      decoration: BoxDecoration(
+                                        color: AppColors.primaryEmerald.withValues(alpha: 0.1),
+                                        borderRadius: BorderRadius.circular(10),
+                                      ),
+                                      child: const Icon(
+                                        Icons.volunteer_activism_rounded,
+                                        color: AppColors.primaryEmerald,
+                                        size: 24,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 14),
+                                    const Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        mainAxisAlignment: MainAxisAlignment.center,
+                                        children: [
+                                          Text(
+                                            'No contributions yet',
+                                            style: TextStyle(
+                                              fontSize: 14,
+                                              fontWeight: FontWeight.bold,
+                                              color: AppColors.textPrimary,
+                                            ),
+                                          ),
+                                          SizedBox(height: 2),
+                                          Text(
+                                            'Post surplus food to start tracking impact.',
+                                            style: TextStyle(
+                                              fontSize: 12,
+                                              color: AppColors.textSecondary,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ),
-                            );
-                          },
-                        ),
                       ),
                       const SizedBox(height: 14),
                       _SectionHeader(
@@ -155,36 +213,63 @@ class _DonorHomeTab extends StatelessWidget {
                       const SizedBox(height: 8),
                       Expanded(
                         flex: 2,
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            Expanded(
-                              child: _NearbyNgoCard(
-                                ngo: firstNgo,
-                                onTap: () {
-                                  Navigator.of(context).push(
-                                    MaterialPageRoute(
-                                      builder: (_) => const NgoDetailScreen(),
+                        child: ngos.isNotEmpty
+                            ? Row(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: [
+                                  Expanded(
+                                    child: _NearbyNgoCard(
+                                      ngo: ngos[0],
+                                      onTap: () {
+                                        Navigator.of(context).push(
+                                          MaterialPageRoute(
+                                            builder: (_) => NgoDetailScreen(ngo: ngos[0]),
+                                          ),
+                                        );
+                                      },
                                     ),
-                                  );
-                                },
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: _NearbyNgoCard(
-                                ngo: secondNgo,
-                                onTap: () {
-                                  Navigator.of(context).push(
-                                    MaterialPageRoute(
-                                      builder: (_) => const NgoDetailScreen(),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: ngos.length > 1
+                                        ? _NearbyNgoCard(
+                                            ngo: ngos[1],
+                                            onTap: () {
+                                              Navigator.of(context).push(
+                                                MaterialPageRoute(
+                                                  builder: (_) => NgoDetailScreen(ngo: ngos[1]),
+                                                ),
+                                              );
+                                            },
+                                          )
+                                        : _ExploreMoreNgosCard(onTap: onViewNearbyNgos),
+                                  ),
+                                ],
+                              )
+                            : Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                                decoration: BoxDecoration(
+                                  color: AppColors.surface,
+                                  borderRadius: BorderRadius.circular(14),
+                                  border: Border.all(color: AppColors.border),
+                                ),
+                                child: Row(
+                                  children: [
+                                    const Icon(Icons.location_on_outlined, color: AppColors.primaryEmerald),
+                                    const SizedBox(width: 12),
+                                    const Expanded(
+                                      child: Text(
+                                        'Discover verified NGOs operating in Chitwan.',
+                                        style: TextStyle(fontSize: 12.5, color: AppColors.textSecondary),
+                                      ),
                                     ),
-                                  );
-                                },
+                                    TextButton(
+                                      onPressed: onViewNearbyNgos,
+                                      child: const Text('Browse'),
+                                    ),
+                                  ],
+                                ),
                               ),
-                            ),
-                          ],
-                        ),
                       ),
                     ],
                   ),
@@ -193,6 +278,42 @@ class _DonorHomeTab extends StatelessWidget {
             ],
           );
         },
+      ),
+    );
+  }
+}
+
+class _ExploreMoreNgosCard extends StatelessWidget {
+  final VoidCallback onTap;
+  const _ExploreMoreNgosCard({required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: AppColors.surface,
+      borderRadius: BorderRadius.circular(12),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: AppColors.border),
+          ),
+          child: const Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.explore_outlined, color: AppColors.primaryEmerald, size: 28),
+                SizedBox(height: 6),
+                Text(
+                  'Explore More',
+                  style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }

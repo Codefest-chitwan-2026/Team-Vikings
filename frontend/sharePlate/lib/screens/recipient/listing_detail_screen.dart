@@ -26,7 +26,7 @@ class _ListingDetailScreenState extends State<ListingDetailScreen> {
     final authProvider = context.read<AuthProvider>();
     final donationProvider = context.read<DonationProvider>();
 
-    await donationProvider.claimDonationOnApi(
+    final success = await donationProvider.claimDonationOnApi(
       token: authProvider.currentUser?.token,
       donationId: widget.listing.id,
       pickupMethod: 'SELF',
@@ -35,11 +35,22 @@ class _ListingDetailScreenState extends State<ListingDetailScreen> {
     if (!mounted) return;
     setState(() => _isClaiming = false);
 
-    Navigator.of(context).pushReplacement(
-      MaterialPageRoute(
-        builder: (_) => ClaimSuccessScreen(listing: widget.listing),
-      ),
-    );
+    if (success) {
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(
+          builder: (_) => ClaimSuccessScreen(listing: widget.listing),
+        ),
+      );
+    } else {
+      final msg = donationProvider.errorMessage ?? 'Unable to claim this listing at this moment.';
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(msg),
+          backgroundColor: AppColors.error,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
   }
 
   @override

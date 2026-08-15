@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 import '../../core/constants/app_colors.dart';
-import '../../models/notification_model.dart';
+import '../../providers/auth_provider.dart';
+import '../../providers/notification_provider.dart';
 import '../../widgets/shared/notification_tile.dart';
 
-/// Notifications screen shown to a recipient (NGO).
 class RecipientNotificationsScreen extends StatefulWidget {
   const RecipientNotificationsScreen({super.key});
 
@@ -17,41 +18,35 @@ class _RecipientNotificationsScreenState
     extends State<RecipientNotificationsScreen> {
   bool _showOnlyUnread = false;
 
-  final List<NotificationItem> _notifications = [
-    const NotificationItem(
-      title: 'New listing nearby',
-      message: 'Chitwan Black Forest posted a free bakery box, 0.6 km away.',
-      timeAgo: '5m',
-      type: NotificationType.info,
-    ),
-    const NotificationItem(
-      title: 'Claim confirmed',
-      message: 'Your claim on the wedding catering trays was accepted.',
-      timeAgo: '22m',
-      type: NotificationType.success,
-    ),
-    const NotificationItem(
-      title: 'Pickup window closing soon',
-      message: 'Pickup for the rice & curry listing closes in 15 minutes.',
-      timeAgo: '35m',
-      type: NotificationType.alert,
-    ),
-    const NotificationItem(
-      title: 'Pickup completed',
-      message: 'Your pickup from Hotel Barahi was marked as completed.',
-      timeAgo: '4h',
-      type: NotificationType.pickup,
-    ),
-    const NotificationItem(
-      title: 'Weekly impact summary',
-      message: 'Your organisation received 58 kg of food this week.',
-      timeAgo: '1d',
-      type: NotificationType.summary,
-    ),
-  ];
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _fetch();
+    });
+  }
+
+  Future<void> _fetch() async {
+    final auth = context.read<AuthProvider>();
+    final token = auth.currentUser?.token;
+    if (token != null && token.isNotEmpty) {
+      await context.read<NotificationProvider>().fetchNotifications(token: token);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
+    final notifProvider = context.watch<NotificationProvider>();
+    final auth = context.watch<AuthProvider>();
+    final token = auth.currentUser?.token;
+
+    final notifications = notifProvider.notifications;
+    final unreadCount = notifProvider.unreadCount;
+
+    final displayedNotifications = _showOnlyUnread
+        ? notifications.where((n) => !n.isRead).toList()
+        : notifications;
+
     final canPop = Navigator.of(context).canPop();
 
     return Scaffold(
@@ -81,6 +76,9 @@ class _RecipientNotificationsScreenState
             icon: const Icon(Icons.done_all_rounded,
                 color: AppColors.primaryEmerald),
             onPressed: () {
+              if (token != null && token.isNotEmpty) {
+                notifProvider.markAllAsRead(token: token);
+              }
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(
                   content: Text('All notifications marked as read'),
@@ -92,52 +90,59 @@ class _RecipientNotificationsScreenState
         ],
       ),
       body: SafeArea(
-        child: Column(
-          children: [
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-              child: Row(
-                children: [
-                  ChoiceChip(
-                    label: Text('All (${_notifications.length})'),
-                    selected: !_showOnlyUnread,
-                    onSelected: (val) =>
-                        setState(() => _showOnlyUnread = false),
-                    selectedColor: AppColors.primaryEmerald.withValues(alpha: 0.15),
-                    labelStyle: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: !_showOnlyUnread
-                          ? AppColors.primaryEmerald
-                          : AppColors.textSecondary,
+        child: RefreshIndicator(
+          onRefresh: _fetch,
+          color: AppColors.primaryEmerald,
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                child: Row(
+                  children: [
+                    ChoiceChip(
+                      label: Text('All (${notifications.length})'),
+                      selected: !_showOnlyUnread,
+                      onSelected: (val) =>
+                          setState(() => _showOnlyUnread = false),
+                      selectedColor: AppColors.primaryEmerald.withValues(alpha: 0.15),
+                      labelStyle: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: !_showOnlyUnread
+                            ? AppColors.primaryEmerald
+                            : AppColors.textSecondary,
+                      ),
                     ),
-                  ),
-                  const SizedBox(width: 8),
-                  ChoiceChip(
-                    label: const Text('Unread (2)'),
-                    selected: _showOnlyUnread,
-                    onSelected: (val) =>
-                        setState(() => _showOnlyUnread = true),
-                    selectedColor: AppColors.primaryEmerald.withValues(alpha: 0.15),
-                    labelStyle: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: _showOnlyUnread
-                          ? AppColors.primaryEmerald
-                          : AppColors.textSecondary,
+                    const SizedBox(width: 8),
+                    ChoiceChip(
+                      label: Text('Unread ($unreadCount)'),
+                      selected: _showOnlyUnread,
+                      onSelected: (val) =>
+                          setState(() => _showOnlyUnread = true),
+                      selectedColor: AppColors.primaryEmerald.withValues(alpha: 0.15),
+                      labelStyle: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: _showOnlyUnread
+                            ? AppColors.primaryEmerald
+                            : AppColors.textSecondary,
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
-            ),
-            Expanded(
-              child: NotificationListView(
-                items: _showOnlyUnread
-                    ? _notifications.take(2).toList()
-                    : _notifications,
+              Expanded(
+                child: NotificationListView(
+                  items: displayedNotifications,
+                  onItemTap: (item) {
+                    if (token != null && token.isNotEmpty && item.id.isNotEmpty) {
+                      notifProvider.markAsRead(token: token, id: item.id);
+                    }
+                  },
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

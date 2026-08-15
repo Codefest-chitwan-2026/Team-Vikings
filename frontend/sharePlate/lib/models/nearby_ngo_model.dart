@@ -44,137 +44,60 @@ class NearbyNgo {
   });
 
   String get distanceLabel => '${distanceKm.toStringAsFixed(1)} km away';
+  String get area => address;
+  String get focusArea => category;
+  String get phone => phoneNumber;
 
-  static const List<NearbyNgo> mockNgos = [
-    NearbyNgo(
-      id: 'ngo_1',
-      name: 'Aasha Foundation',
-      category: 'NGO',
-      address: 'Lazimpat, Kathmandu',
-      distanceKm: 0.8,
-      phoneNumber: '+977 9841234567',
-      email: 'contact@aashafoundation.org.np',
-      contactPerson: 'Suman Shrestha (Director)',
-      panNumber: '601298451',
-      isVerified: true,
-      totalMealsReceived: 1240,
-      peopleSupported: 350,
-      description:
-          'Aasha Foundation is dedicated to zero food waste and daily hunger alleviation across the Kathmandu Valley, serving underprivileged children, day laborers, and elderly shelters.',
-      currentNeeds: [
-        'Need 35+ dinner portions daily',
-        'Staple cooked meals (rice, lentils, vegetables)',
-        'Bakery items for morning breakfast'
-      ],
-      themeColor: Color(0xFFF5E8F6),
-      bannerGradient: [Color(0xFF8E24AA), Color(0xFF4A148C)],
-      latitude: 27.7215,
-      longitude: 85.3206,
-      urgencyLevel: 'High',
-    ),
-    NearbyNgo(
-      id: 'ngo_2',
-      name: 'Gautam Buddha Foundation',
-      category: 'Community Kitchen',
-      address: 'Baluwatar, Kathmandu',
-      distanceKm: 1.4,
-      phoneNumber: '+977 9801987654',
-      email: 'info@gautambuddhafdn.org',
-      contactPerson: 'Ramesh Adhikari',
-      panNumber: '602384729',
-      isVerified: true,
-      totalMealsReceived: 890,
-      peopleSupported: 220,
-      description:
-          'Operating an open community kitchen supplying nutritious hot meals for hospital visitors, homeless shelters, and low-income families in Baluwatar.',
-      currentNeeds: [
-        'Surplus cooked catering rice & curry',
-        'Packed boxed meals',
-        'Dairy & bakery surplus'
-      ],
-      themeColor: Color(0xFFE5F4EA),
-      bannerGradient: [Color(0xFF1EAA55), Color(0xFF0F6B35)],
-      latitude: 27.7289,
-      longitude: 85.3340,
-      urgencyLevel: 'High',
-    ),
-    NearbyNgo(
-      id: 'ngo_3',
-      name: 'Sneha Children Home',
-      category: 'Orphanage',
-      address: 'Sanepa, Lalitpur',
-      distanceKm: 2.3,
-      phoneNumber: '+977 9851122334',
-      email: 'help@snehachildren.org',
-      contactPerson: 'Sneha Thapa',
-      panNumber: '603991283',
-      isVerified: true,
-      totalMealsReceived: 1650,
-      peopleSupported: 65,
-      description:
-          'A registered residential care home providing shelter, healthcare, and education for 65 orphaned and destitute children in Lalitpur.',
-      currentNeeds: [
-        'Fresh fruits and bread/pastries',
-        'Cooked lunch/dinner portions',
-        'Packaged snacks & juices'
-      ],
-      themeColor: Color(0xFFFFF3E0),
-      bannerGradient: [Color(0xFFFB8C00), Color(0xFFE65100)],
-      latitude: 27.6852,
-      longitude: 85.3124,
-      urgencyLevel: 'Moderate',
-    ),
-    NearbyNgo(
-      id: 'ngo_4',
-      name: 'Matribhumi Elderly Sanctuary',
-      category: 'Elderly Home',
-      address: 'Pashupati Area, Kathmandu',
-      distanceKm: 3.1,
-      phoneNumber: '+977 9849988776',
-      email: 'care@matribhumisenior.org',
-      contactPerson: 'Kiran KC',
-      panNumber: '604817263',
-      isVerified: true,
-      totalMealsReceived: 720,
-      peopleSupported: 48,
-      description:
-          'Caring for senior citizens without family support. Providing gentle, digestible vegetarian food, medical care, and continuous support.',
-      currentNeeds: [
-        'Soft vegetarian meals (Khichdi, soup, boiled veggies)',
-        'Dairy products (milk, curd)',
-        'Fresh seasonal fruits'
-      ],
-      themeColor: Color(0xFFE8EAF6),
-      bannerGradient: [Color(0xFF3949AB), Color(0xFF1A237E)],
-      latitude: 27.7104,
-      longitude: 85.3487,
-      urgencyLevel: 'Standard',
-    ),
-    NearbyNgo(
-      id: 'ngo_5',
-      name: 'Nepal Youth Food Bank',
-      category: 'NGO',
-      address: 'Thamel, Kathmandu',
-      distanceKm: 1.1,
-      phoneNumber: '+977 9812345678',
-      email: 'youthfoodbank@nepal.org',
-      contactPerson: 'Prashant Maharjan',
-      panNumber: '605128374',
-      isVerified: true,
-      totalMealsReceived: 2100,
-      peopleSupported: 500,
-      description:
-          'Youth-led food distribution network collecting commercial surplus from hotels, restaurants, and bakeries for distribution in squatter settlements.',
-      currentNeeds: [
-        'Any bulk cooked meal portions',
-        'Pre-packed sandwiches and pastries',
-        'Leftover party trays'
-      ],
-      themeColor: Color(0xFFE0F2F1),
-      bannerGradient: [Color(0xFF00897B), Color(0xFF004D40)],
-      latitude: 27.7154,
-      longitude: 85.3123,
-      urgencyLevel: 'High',
-    ),
-  ];
+  factory NearbyNgo.fromJson(Map<String, dynamic> json) {
+    final orgName = (json['organization_name'] ?? json['name'] ?? 'Verified NGO').toString();
+    final orgType = (json['organization_type'] ?? json['category'] ?? 'NGO').toString();
+    final address = (json['address'] ?? 'Kathmandu').toString();
+    final dist = double.tryParse(json['distance_km']?.toString() ?? '1.2') ?? 1.2;
+    final phone = (json['phone_number'] ?? json['phone'] ?? json['phone_num'] ?? '').toString();
+    final email = (json['email'] ?? '').toString();
+    final contact = (json['contact_name'] ?? json['contactPerson'] ?? 'Coordinator').toString();
+    final pan = (json['registration_number'] ?? json['panNumber'] ?? '').toString();
+    final status = (json['verification_status'] ?? '').toString().toUpperCase();
+    final isVerified = status == 'VERIFIED' || json['isVerified'] == true;
+    final lat = double.tryParse(json['latitude']?.toString() ?? '27.7172') ?? 27.7172;
+    final lng = double.tryParse(json['longitude']?.toString() ?? '85.3240') ?? 85.3240;
+
+    return NearbyNgo(
+      id: (json['id'] ?? 'ngo-${DateTime.now().millisecondsSinceEpoch}').toString(),
+      name: orgName,
+      category: orgType,
+      address: address,
+      distanceKm: dist,
+      phoneNumber: phone,
+      email: email,
+      contactPerson: contact,
+      panNumber: pan,
+      isVerified: isVerified,
+      totalMealsReceived: int.tryParse(json['total_meals_received']?.toString() ?? '1200') ?? 1200,
+      peopleSupported: int.tryParse(json['people_supported']?.toString() ?? '150') ?? 150,
+      description: json['description']?.toString() ?? 'Registered NGO dedicated to food distribution and community support.',
+      currentNeeds: json['current_needs'] is List
+          ? (json['current_needs'] as List).map((e) => e.toString()).toList()
+          : const ['Cooked dinner meals', 'Bakery surplus', 'Dry food rations'],
+      themeColor: const Color(0xFFF5E8F6),
+      bannerGradient: _getGradient(orgType),
+      latitude: lat,
+      longitude: lng,
+      urgencyLevel: json['urgency_level']?.toString() ?? 'High',
+    );
+  }
+
+  static List<Color> _getGradient(String type) {
+    final lower = type.toLowerCase();
+    if (lower.contains('orphan')) {
+      return const [Color(0xFFFB8C00), Color(0xFFE65100)];
+    } else if (lower.contains('elder')) {
+      return const [Color(0xFF3949AB), Color(0xFF1A237E)];
+    } else if (lower.contains('kitchen')) {
+      return const [Color(0xFF1EAA55), Color(0xFF0F6B35)];
+    }
+    return const [Color(0xFF8E24AA), Color(0xFF4A148C)];
+  }
+
+  static const List<NearbyNgo> mockNgos = [];
 }

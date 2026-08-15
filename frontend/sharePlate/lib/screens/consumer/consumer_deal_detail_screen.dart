@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/constants/app_colors.dart';
+import '../../models/consumer_order_model.dart';
 import '../../models/donation_model.dart';
 import '../../providers/auth_provider.dart';
-import '../../services/donations_api_service.dart';
+import '../../providers/donation_provider.dart';
+import '../../providers/order_provider.dart';
 import '../../widgets/login_screen/primary_button.dart';
 
 class ConsumerDealDetailScreen extends StatefulWidget {
@@ -17,32 +19,61 @@ class ConsumerDealDetailScreen extends StatefulWidget {
 }
 
 class _ConsumerDealDetailScreenState extends State<ConsumerDealDetailScreen> {
-  final DonationsApiService _apiService = DonationsApiService();
   bool _isReserving = false;
 
   Future<void> _reserveDeal() async {
     setState(() => _isReserving = true);
     final auth = context.read<AuthProvider>();
+    final donationProvider = context.read<DonationProvider>();
+    final orderProvider = context.read<OrderProvider>();
     final token = auth.currentUser?.token;
 
     String qrCode = 'DEAL-${widget.deal.id}-${DateTime.now().millisecondsSinceEpoch % 10000}';
 
-    if (token != null && token.isNotEmpty) {
-      try {
-        final res = await _apiService.reserveDonation(
-          token: token,
-          id: widget.deal.id,
-        );
-        if (res['reservation']?['pickup_ticket']?['qr_code'] != null) {
-          qrCode = res['reservation']['pickup_ticket']['qr_code'].toString();
-        }
-      } catch (_) {}
-    }
+    final res = await donationProvider.reserveFlashSaleOnApi(
+      token: token,
+      donationId: widget.deal.id,
+    );
 
     if (!mounted) return;
     setState(() => _isReserving = false);
 
-    _showPickupTicketModal(qrCode);
+    if (res != null) {
+      if (res['reservation']?['pickup_ticket']?['qr_code'] != null) {
+        qrCode = res['reservation']['pickup_ticket']['qr_code'].toString();
+      } else if (res['order_code'] != null) {
+        qrCode = res['order_code'].toString();
+      }
+
+      final newOrder = ConsumerOrderModel(
+        id: 'ord-${DateTime.now().millisecondsSinceEpoch}',
+        orderCode: qrCode,
+        title: widget.deal.title,
+        storeName: widget.deal.donorBusinessName ?? 'Local Food Store',
+        storePhone: widget.deal.recipientPhone ?? '',
+        pickupAddress: widget.deal.pickupAddress,
+        originalPrice: widget.deal.originalPrice ?? 300,
+        discountedPrice: widget.deal.discountedPrice ?? 150,
+        category: widget.deal.category,
+        orderTime: DateTime.now(),
+        pickupWindowMinutes: 45,
+        status: ConsumerOrderStatus.readyForPickup,
+        qrCode: qrCode,
+        donationId: widget.deal.id,
+      );
+      orderProvider.addOrder(newOrder);
+
+      _showPickupTicketModal(qrCode);
+    } else {
+      final msg = donationProvider.errorMessage ?? 'Unable to reserve deal. It may already be claimed.';
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(msg),
+          backgroundColor: AppColors.error,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
   }
 
   void _showPickupTicketModal(String qrCode) {
@@ -80,10 +111,10 @@ class _ConsumerDealDetailScreenState extends State<ConsumerDealDetailScreen> {
                 ),
               ),
               const SizedBox(height: 4),
-              Text(
+              const Text(
                 'Show this pickup ticket code to the store staff at collection.',
                 textAlign: TextAlign.center,
-                style: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
+                style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
               ),
               const SizedBox(height: 20),
               Container(

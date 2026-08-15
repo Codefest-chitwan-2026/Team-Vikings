@@ -20,6 +20,14 @@ class _NearbyNgosListScreenState extends State<NearbyNgosListScreen> {
   NgoListFilter _selectedFilter = NgoListFilter.all;
 
   @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<DonationProvider>().fetchNearbyNgos();
+    });
+  }
+
+  @override
   void dispose() {
     _searchController.dispose();
     super.dispose();
@@ -57,7 +65,8 @@ class _NearbyNgosListScreenState extends State<NearbyNgosListScreen> {
   @override
   Widget build(BuildContext context) {
     final donationProvider = context.watch<DonationProvider>();
-    final filteredNgos = _filterNgos(donationProvider.nearbyNgos);
+    final allNgos = donationProvider.nearbyNgos;
+    final filteredNgos = _filterNgos(allNgos);
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -80,129 +89,182 @@ class _NearbyNgosListScreenState extends State<NearbyNgosListScreen> {
       body: SafeArea(
         child: Column(
           children: [
-            // Search Input
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
-              child: Container(
-                decoration: BoxDecoration(
-                  color: AppColors.surface,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: AppColors.border),
-                ),
-                child: TextField(
-                  controller: _searchController,
-                  onChanged: (_) => setState(() {}),
-                  decoration: InputDecoration(
-                    hintText: 'Search NGOs by name, cause or area...',
-                    hintStyle: TextStyle(
-                      fontSize: 13,
-                      color: AppColors.textSecondary.withValues(alpha: 0.6),
+            if (allNgos.isNotEmpty) ...[
+              // Search Input
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: AppColors.surface,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: AppColors.border),
+                  ),
+                  child: TextField(
+                    controller: _searchController,
+                    onChanged: (_) => setState(() {}),
+                    decoration: InputDecoration(
+                      hintText: 'Search NGOs by name, cause or area...',
+                      hintStyle: TextStyle(
+                        fontSize: 13,
+                        color: AppColors.textSecondary.withValues(alpha: 0.6),
+                      ),
+                      prefixIcon: const Icon(Icons.search, color: AppColors.textSecondary, size: 20),
+                      suffixIcon: _searchController.text.isNotEmpty
+                          ? IconButton(
+                              icon: const Icon(Icons.clear, size: 18),
+                              onPressed: () {
+                                _searchController.clear();
+                                setState(() {});
+                              },
+                            )
+                          : null,
+                      border: InputBorder.none,
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                     ),
-                    prefixIcon: const Icon(Icons.search, color: AppColors.textSecondary, size: 20),
-                    suffixIcon: _searchController.text.isNotEmpty
-                        ? IconButton(
-                            icon: const Icon(Icons.clear, size: 18),
-                            onPressed: () {
-                              _searchController.clear();
-                              setState(() {});
-                            },
-                          )
-                        : null,
-                    border: InputBorder.none,
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                   ),
                 ),
               ),
-            ),
 
-            // Horizontal Filter Chips
-            SizedBox(
-              height: 38,
-              child: ListView(
-                scrollDirection: Axis.horizontal,
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-                children: [
-                  _filterChip('All NGOs', NgoListFilter.all),
-                  const SizedBox(width: 8),
-                  _filterChip('High Urgency', NgoListFilter.highUrgency),
-                  const SizedBox(width: 8),
-                  _filterChip('Within 2 km', NgoListFilter.withinTwoKm),
-                  const SizedBox(width: 8),
-                  _filterChip('Orphanages', NgoListFilter.orphanage),
-                  const SizedBox(width: 8),
-                  _filterChip('Community Kitchens', NgoListFilter.communityKitchen),
-                  const SizedBox(width: 8),
-                  _filterChip('Elderly Homes', NgoListFilter.elderlyHome),
-                ],
+              // Horizontal Filter Chips
+              SizedBox(
+                height: 38,
+                child: ListView(
+                  scrollDirection: Axis.horizontal,
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  children: [
+                    _filterChip('All', NgoListFilter.all),
+                    const SizedBox(width: 8),
+                    _filterChip('High Urgency', NgoListFilter.highUrgency),
+                    const SizedBox(width: 8),
+                    _filterChip('Orphanages', NgoListFilter.orphanage),
+                    const SizedBox(width: 8),
+                    _filterChip('Community Kitchens', NgoListFilter.communityKitchen),
+                    const SizedBox(width: 8),
+                    _filterChip('Elderly Homes', NgoListFilter.elderlyHome),
+                    const SizedBox(width: 8),
+                    _filterChip('Within 2 km', NgoListFilter.withinTwoKm),
+                  ],
+                ),
               ),
-            ),
+              const SizedBox(height: 12),
+            ],
 
-            const SizedBox(height: 12),
-
-            // Ngo Card List
+            // Ngo Card List / Empty State
             Expanded(
-              child: filteredNgos.isEmpty
+              child: allNgos.isEmpty
                   ? Center(
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(Icons.apartment, size: 54, color: AppColors.textSecondary.withValues(alpha: 0.4)),
-                          const SizedBox(height: 12),
-                          const Text(
-                            'No organizations found',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                              color: AppColors.textPrimary,
+                      child: SingleChildScrollView(
+                        padding: const EdgeInsets.all(32),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Container(
+                              width: 80,
+                              height: 80,
+                              decoration: const BoxDecoration(
+                                color: Color(0xFFE8F5E9),
+                                shape: BoxShape.circle,
+                              ),
+                              child: const Icon(
+                                Icons.apartment_rounded,
+                                size: 38,
+                                color: AppColors.primaryEmerald,
+                              ),
                             ),
-                          ),
-                          const SizedBox(height: 4),
-                          const Text(
-                            'Try clearing search or choosing another category.',
-                            style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
-                          ),
-                          const SizedBox(height: 16),
-                          TextButton(
-                            onPressed: () {
-                              setState(() {
-                                _searchController.clear();
-                                _selectedFilter = NgoListFilter.all;
-                              });
-                            },
-                            child: const Text('Reset filters'),
-                          ),
-                        ],
+                            const SizedBox(height: 20),
+                            const Text(
+                              'No Nearby NGOs Listed',
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                                color: AppColors.textPrimary,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            const Text(
+                              'No registered NGOs found in this area. You can still publish surplus food donations for priority broadcast.',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(fontSize: 13.5, color: AppColors.textSecondary, height: 1.4),
+                            ),
+                            const SizedBox(height: 24),
+                            ElevatedButton.icon(
+                              onPressed: () {
+                                Navigator.of(context).push(
+                                  MaterialPageRoute(builder: (_) => const AddDonationScreen()),
+                                );
+                              },
+                              icon: const Icon(Icons.add, color: Colors.white, size: 18),
+                              label: const Text('Post Food Donation', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: AppColors.primaryEmerald,
+                                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     )
-                  : ListView.separated(
-                      padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
-                      itemCount: filteredNgos.length,
-                      separatorBuilder: (_, _) => const SizedBox(height: 12),
-                      itemBuilder: (context, index) {
-                        final ngo = filteredNgos[index];
-                        return _NgoListItemCard(
-                          ngo: ngo,
-                          onTap: () {
-                            Navigator.of(context).push(
-                              MaterialPageRoute(
-                                // builder: (_) => NgoDetailScreen(ngo: ngo),
-                                builder: (_) => NgoDetailScreen(),
-
-                              ),
-                            );
-                          },
-                          onDonateTap: () {
-                            Navigator.of(context).push(
-                              MaterialPageRoute(
-                                builder: (_) => AddDonationScreen(
-                                  prefilledAddress: ngo.address,
+                  : filteredNgos.isEmpty
+                      ? Center(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.apartment, size: 54, color: AppColors.textSecondary.withValues(alpha: 0.4)),
+                              const SizedBox(height: 12),
+                              const Text(
+                                'No organizations found',
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                  color: AppColors.textPrimary,
                                 ),
                               ),
+                              const SizedBox(height: 4),
+                              const Text(
+                                'Try clearing search or choosing another category.',
+                                style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
+                              ),
+                              const SizedBox(height: 16),
+                              TextButton(
+                                onPressed: () {
+                                  setState(() {
+                                    _searchController.clear();
+                                    _selectedFilter = NgoListFilter.all;
+                                  });
+                                },
+                                child: const Text('Reset filters'),
+                              ),
+                            ],
+                          ),
+                        )
+                      : ListView.separated(
+                          padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+                          itemCount: filteredNgos.length,
+                          separatorBuilder: (_, _) => const SizedBox(height: 12),
+                          itemBuilder: (context, index) {
+                            final ngo = filteredNgos[index];
+                            return _NgoListItemCard(
+                              ngo: ngo,
+                              onTap: () {
+                                Navigator.of(context).push(
+                                  MaterialPageRoute(
+                                    builder: (_) => NgoDetailScreen(ngo: ngo),
+                                  ),
+                                );
+                              },
+                              onDonateTap: () {
+                                Navigator.of(context).push(
+                                  MaterialPageRoute(
+                                    builder: (_) => AddDonationScreen(
+                                      prefilledAddress: ngo.address,
+                                    ),
+                                  ),
+                                );
+                              },
                             );
                           },
-                        );
-                      },
-                    ),
+                        ),
             ),
           ],
         ),

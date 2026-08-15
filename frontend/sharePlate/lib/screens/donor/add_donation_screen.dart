@@ -199,7 +199,7 @@ class _AddDonationScreenState extends State<AddDonationScreen> {
         Navigator.of(context).pop();
       }
     } else {
-      await donationProvider.createDonationOnApi(
+      final success = await donationProvider.createDonationOnApi(
         token: authProvider.currentUser?.token,
         title: foodName,
         description: description.isEmpty
@@ -221,9 +221,18 @@ class _AddDonationScreenState extends State<AddDonationScreen> {
 
       if (mounted) {
         setState(() => _isLoading = false);
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (_) => const ListingSuccessScreen()),
-        );
+        if (success) {
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(builder: (_) => const ListingSuccessScreen()),
+          );
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(donationProvider.errorMessage ?? 'Failed to publish food listing. Please try again.'),
+              backgroundColor: AppColors.error,
+            ),
+          );
+        }
       }
     }
   }

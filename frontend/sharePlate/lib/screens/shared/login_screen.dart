@@ -102,7 +102,7 @@ class _LoginScreenState extends State<LoginScreen> {
         _hasLoginError = true;
         _loginErrorMessage = (error != null && error.isNotEmpty)
             ? error
-            : 'Invalid password or email';
+            : 'Invalid email or password';
       });
     }
   }

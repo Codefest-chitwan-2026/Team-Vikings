@@ -10,7 +10,7 @@ extension FoodCategoryX on FoodCategory {
 
 enum ListingType { donateFree, discountedSale }
 
-enum ListingStatus { available, claimed, completed }
+enum ListingStatus { available, claimed, completed, expired, cancelled }
 
 enum DonationStatus { awaitingClaim, ngoEnRoute, completed }
 
@@ -54,6 +54,14 @@ class DonationItem {
   final String? description;
   final String? receiptNumber;
   final String? completedDate;
+  final String? donorBusinessName;
+  final String? qrCode;
+  final String? manualCode;
+  final DateTime? bestBefore;
+  final DateTime? priorityExpiresAt;
+  final bool ngoPriorityActive;
+  final int prioritySecondsRemaining;
+  final Map<String, dynamic>? rawJson;
 
   const DonationItem({
     required this.id,
@@ -79,6 +87,14 @@ class DonationItem {
     this.description,
     this.receiptNumber,
     this.completedDate,
+    this.donorBusinessName,
+    this.qrCode,
+    this.manualCode,
+    this.bestBefore,
+    this.priorityExpiresAt,
+    this.ngoPriorityActive = false,
+    this.prioritySecondsRemaining = 0,
+    this.rawJson,
   });
 
   factory DonationItem.fromJson(Map<String, dynamic> json) {
@@ -86,11 +102,11 @@ class DonationItem {
     final rawFoodType = (json['food_type'] ?? 'VEG').toString().toUpperCase();
     final rawListingType = (json['listing_type'] ?? 'DONATION').toString().toUpperCase();
 
-    final FoodCategory cat = rawFoodType == 'NONVEG'
+    final FoodCategory cat = rawFoodType.contains('NON')
         ? FoodCategory.nonVeg
-        : (rawFoodType == 'MIXED' ? FoodCategory.mixed : FoodCategory.veg);
+        : (rawFoodType.contains('MIX') ? FoodCategory.mixed : FoodCategory.veg);
 
-    final ListingType listType = rawListingType == 'FLASH_SALE'
+    final ListingType listType = (rawListingType == 'FLASH_SALE' || rawListingType == 'DISCOUNTEDSALE')
         ? ListingType.discountedSale
         : ListingType.donateFree;
 
@@ -99,7 +115,7 @@ class DonationItem {
     if (rawStatus == 'AVAILABLE') {
       donStatus = DonationStatus.awaitingClaim;
       active = true;
-    } else if (rawStatus == 'CLAIMED' || rawStatus == 'RESERVED') {
+    } else if (rawStatus == 'CLAIMED' || rawStatus == 'RESERVED' || rawStatus == 'NGO_EN_ROUTE') {
       donStatus = DonationStatus.ngoEnRoute;
       active = true;
     } else {
@@ -109,10 +125,53 @@ class DonationItem {
 
     final claimMap = json['claim'] is Map<String, dynamic> ? json['claim'] as Map<String, dynamic> : null;
     final ngoName = claimMap?['ngo_name'] ?? claimMap?['ngo_details']?['organization_name'];
+    final ngoPhone = claimMap?['ngo_details']?['phone'] ?? claimMap?['volunteer_phone'];
+    final ngoAddress = claimMap?['ngo_details']?['address'];
+
+    String? ticketQr = json['qr_code']?.toString();
+    String? manualCode = json['manual_code']?.toString();
+
+    if (claimMap?['pickup_ticket'] is Map<String, dynamic>) {
+      ticketQr ??= claimMap!['pickup_ticket']['qr_code']?.toString();
+    }
+    if (json['pickup_ticket'] is Map<String, dynamic>) {
+      ticketQr ??= json['pickup_ticket']['qr_code']?.toString();
+    }
+
+    final detailMap = json['listing_detail'] is Map<String, dynamic>
+        ? json['listing_detail'] as Map<String, dynamic>
+        : null;
+
+    String pickupWin = '45 minutes';
+    if (detailMap != null && detailMap['pickup_window_start'] != null && detailMap['pickup_window_end'] != null) {
+      try {
+        final start = DateTime.parse(detailMap['pickup_window_start'].toString());
+        final end = DateTime.parse(detailMap['pickup_window_end'].toString());
+        final diff = end.difference(start).inMinutes;
+        pickupWin = '$diff minutes';
+      } catch (_) {}
+    }
+
+    DateTime? bestBeforeDate;
+    if (json['best_before'] != null) {
+      try {
+        bestBeforeDate = DateTime.parse(json['best_before'].toString());
+      } catch (_) {}
+    }
+
+    DateTime? priorityExpiry;
+    if (json['ngo_priority_expires_at'] != null) {
+      try {
+        priorityExpiry = DateTime.parse(json['ngo_priority_expires_at'].toString());
+      } catch (_) {}
+    }
+
+    final businessName = json['donor_business_name']?.toString();
+    final photo = json['food_photo'] ?? json['image'] ?? json['imagePath'];
 
     return DonationItem(
       id: (json['id'] ?? '').toString(),
-      postedAgo: json['created_at'] != null ? 'Recently' : '10 min ago',
+      postedAgo: json['created_at'] != null ? _formatDateAgo(json['created_at'].toString()) : 'Recently',
       title: json['title'] ?? 'Food Donation',
       category: cat,
       quantity: (double.tryParse(json['quantity']?.toString() ?? '10') ?? 10).toInt(),
@@ -123,17 +182,41 @@ class DonationItem {
       status: donStatus,
       isActive: active,
       recipient: ngoName?.toString(),
+      recipientPhone: ngoPhone?.toString(),
+      recipientAddress: ngoAddress?.toString(),
       pickupAddress: json['pickup_address'] ?? 'Kathmandu',
       pickupLatitude: double.tryParse(json['latitude']?.toString() ?? '') ?? 27.7215,
       pickupLongitude: double.tryParse(json['longitude']?.toString() ?? '') ?? 85.3206,
+      pickupWindow: pickupWin,
       listingType: listType,
       originalPrice: double.tryParse(json['price']?.toString() ?? ''),
       discountedPrice: double.tryParse(json['flash_sale_price']?.toString() ?? ''),
-      imagePath: json['image']?.toString(),
+      imagePath: photo?.toString(),
       description: json['description']?.toString(),
-      receiptNumber: 'SP-DON-2026-${json['id'] ?? 1001}',
+      receiptNumber: json['receipt_number']?.toString() ?? 'SP-DON-2026-${json['id'] ?? 1001}',
       completedDate: json['updated_at']?.toString(),
+      donorBusinessName: businessName,
+      qrCode: ticketQr,
+      manualCode: manualCode,
+      bestBefore: bestBeforeDate,
+      priorityExpiresAt: priorityExpiry,
+      ngoPriorityActive: json['ngo_priority_active'] == true,
+      prioritySecondsRemaining: int.tryParse(json['priority_seconds_remaining']?.toString() ?? '0') ?? 0,
+      rawJson: json,
     );
+  }
+
+  static String _formatDateAgo(String iso) {
+    try {
+      final date = DateTime.parse(iso);
+      final diff = DateTime.now().difference(date);
+      if (diff.inMinutes < 1) return 'Just now';
+      if (diff.inMinutes < 60) return '${diff.inMinutes} min ago';
+      if (diff.inHours < 24) return '${diff.inHours} hr ago';
+      return '${diff.inDays} days ago';
+    } catch (_) {
+      return 'Recently';
+    }
   }
 
   DonationItem copyWith({
@@ -160,6 +243,14 @@ class DonationItem {
     String? description,
     String? receiptNumber,
     String? completedDate,
+    String? donorBusinessName,
+    String? qrCode,
+    String? manualCode,
+    DateTime? bestBefore,
+    DateTime? priorityExpiresAt,
+    bool? ngoPriorityActive,
+    int? prioritySecondsRemaining,
+    Map<String, dynamic>? rawJson,
   }) {
     return DonationItem(
       id: id ?? this.id,
@@ -185,6 +276,14 @@ class DonationItem {
       description: description ?? this.description,
       receiptNumber: receiptNumber ?? this.receiptNumber,
       completedDate: completedDate ?? this.completedDate,
+      donorBusinessName: donorBusinessName ?? this.donorBusinessName,
+      qrCode: qrCode ?? this.qrCode,
+      manualCode: manualCode ?? this.manualCode,
+      bestBefore: bestBefore ?? this.bestBefore,
+      priorityExpiresAt: priorityExpiresAt ?? this.priorityExpiresAt,
+      ngoPriorityActive: ngoPriorityActive ?? this.ngoPriorityActive,
+      prioritySecondsRemaining: prioritySecondsRemaining ?? this.prioritySecondsRemaining,
+      rawJson: rawJson ?? this.rawJson,
     );
   }
 
@@ -320,28 +419,6 @@ class DonationModel {
       description: 'Rice, mixed vegetables and lentils prepared for lunchtime.',
       receiptNumber: 'SP-REC-2026-8794',
       completedDate: 'Aug 09, 2026',
-    ),
-    DonationItem(
-      id: '5',
-      postedAgo: '1 week ago',
-      title: 'Vegetable Biryani Pots · 8 Pots',
-      category: FoodCategory.veg,
-      quantity: 8,
-      quantityUnit: 'Pots',
-      servesApprox: '30 people',
-      status: DonationStatus.completed,
-      isActive: false,
-      recipient: 'Gautam Buddha Fdn',
-      recipientPhone: '+977 9801987654',
-      recipientAddress: 'Baluwatar, Kathmandu',
-      pickupAddress: 'Spice Garden, Thamel, Kathmandu',
-      pickupLatitude: 27.7104,
-      pickupLongitude: 85.3487,
-      pickupWindow: '45 minutes',
-      listingType: ListingType.donateFree,
-      description: 'Fragrant vegetable biryani cooked fresh for lunch banquet.',
-      receiptNumber: 'SP-REC-2026-8721',
-      completedDate: 'Aug 07, 2026',
     ),
   ];
 

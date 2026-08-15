@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 import '../../core/constants/app_colors.dart';
+import '../../models/notification_model.dart';
+import '../../providers/auth_provider.dart';
+import '../../providers/notification_provider.dart';
 import '../../widgets/shared/profile/settings_switch_tile.dart';
 import '../../widgets/shared/profile/simple_app_bar.dart';
 
-/// Notification Settings screen for the recipient (NGO) role.
-/// TODO: load the initial toggle values from the signed-in NGO's saved
-/// preferences and persist changes through the settings-update API.
 class RecipientNotificationSettingsScreen extends StatefulWidget {
   const RecipientNotificationSettingsScreen({super.key});
 
@@ -26,7 +27,37 @@ class _RecipientNotificationSettingsScreenState
   bool _emailEnabled = true;
 
   @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final auth = context.read<AuthProvider>();
+      final token = auth.currentUser?.token;
+      if (token != null && token.isNotEmpty) {
+        context.read<NotificationProvider>().fetchPreferences(token: token);
+      }
+    });
+  }
+
+  void _syncSettings(NotificationProvider notifProvider, String? token) {
+    if (token != null && token.isNotEmpty) {
+      final updated = NotificationPreferencesModel(
+        emailNotifications: _emailEnabled,
+        pushNotifications: _pushEnabled,
+        smsAlerts: _claimConfirmations,
+        expiryReminders: _pickupReminders,
+        claimAlerts: _pickupUpdates,
+        marketingUpdates: _newListingsNearby,
+      );
+      notifProvider.updatePreferences(token: token, updated: updated);
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final notifProvider = context.watch<NotificationProvider>();
+    final auth = context.watch<AuthProvider>();
+    final token = auth.currentUser?.token;
+
     return Scaffold(
       backgroundColor: AppColors.white,
       appBar: const SimpleAppBar(title: 'Notification settings'),
@@ -40,14 +71,20 @@ class _RecipientNotificationSettingsScreenState
               title: 'Push notifications',
               subtitle: 'Get alerts on this device as things happen.',
               value: _pushEnabled,
-              onChanged: (value) => setState(() => _pushEnabled = value),
+              onChanged: (value) {
+                setState(() => _pushEnabled = value);
+                _syncSettings(notifProvider, token);
+              },
             ),
             const Divider(height: 1, color: AppColors.border),
             SettingsSwitchTile(
               title: 'Email notifications',
               subtitle: 'Get a copy of important updates in your inbox.',
               value: _emailEnabled,
-              onChanged: (value) => setState(() => _emailEnabled = value),
+              onChanged: (value) {
+                setState(() => _emailEnabled = value);
+                _syncSettings(notifProvider, token);
+              },
             ),
             const SizedBox(height: 20),
             const SettingsSectionLabel(label: 'WHAT YOU HEAR ABOUT'),
@@ -55,35 +92,50 @@ class _RecipientNotificationSettingsScreenState
               title: 'New listings nearby',
               subtitle: 'When a donor posts a listing close to your organization.',
               value: _newListingsNearby,
-              onChanged: (value) => setState(() => _newListingsNearby = value),
+              onChanged: (value) {
+                setState(() => _newListingsNearby = value);
+                _syncSettings(notifProvider, token);
+              },
             ),
             const Divider(height: 1, color: AppColors.border),
             SettingsSwitchTile(
               title: 'Claim confirmations',
               subtitle: 'When a claim you made is accepted by the donor.',
               value: _claimConfirmations,
-              onChanged: (value) => setState(() => _claimConfirmations = value),
+              onChanged: (value) {
+                setState(() => _claimConfirmations = value);
+                _syncSettings(notifProvider, token);
+              },
             ),
             const Divider(height: 1, color: AppColors.border),
             SettingsSwitchTile(
               title: 'Pickup window reminders',
               subtitle: 'A reminder shortly before a pickup window closes.',
               value: _pickupReminders,
-              onChanged: (value) => setState(() => _pickupReminders = value),
+              onChanged: (value) {
+                setState(() => _pickupReminders = value);
+                _syncSettings(notifProvider, token);
+              },
             ),
             const Divider(height: 1, color: AppColors.border),
             SettingsSwitchTile(
               title: 'Pickup updates',
               subtitle: 'When one of your pickups is marked completed.',
               value: _pickupUpdates,
-              onChanged: (value) => setState(() => _pickupUpdates = value),
+              onChanged: (value) {
+                setState(() => _pickupUpdates = value);
+                _syncSettings(notifProvider, token);
+              },
             ),
             const Divider(height: 1, color: AppColors.border),
             SettingsSwitchTile(
               title: 'Weekly impact summary',
               subtitle: 'A weekly recap of what your organization received.',
               value: _weeklySummary,
-              onChanged: (value) => setState(() => _weeklySummary = value),
+              onChanged: (value) {
+                setState(() => _weeklySummary = value);
+                _syncSettings(notifProvider, token);
+              },
             ),
           ],
         ),

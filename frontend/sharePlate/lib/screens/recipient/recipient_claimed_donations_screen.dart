@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../../core/constants/app_colors.dart';
 import '../../models/donation_model.dart';
+import '../../providers/auth_provider.dart';
+import '../../providers/donation_provider.dart';
+import '../../widgets/shared/empty_state_widget.dart';
 
 class RecipientClaimedDonationsScreen extends StatefulWidget {
   const RecipientClaimedDonationsScreen({super.key});
@@ -66,63 +70,64 @@ class _RecipientClaimedDonationsScreenState
   @override
   void initState() {
     super.initState();
-    _claims = [
-      _ClaimedDonation(
-        id: 'claim-1',
-        title: 'Dal Bhat & Mixed Curry Trays',
-        donorName: 'Hotel Annapurna Kitchen',
-        donorPhone: '9841234567',
-        pickupAddress: 'Lazimpat, Kathmandu',
-        area: 'Lazimpat',
-        distanceKm: 1.2,
-        quantity: 18,
-        quantityUnit: 'Trays',
-        category: FoodCategory.veg,
-        claimCode: 'CLM-7842',
-        claimedAt: DateTime.now().subtract(const Duration(minutes: 15)),
-        pickupWindowMinutes: 45,
-        description:
-            'Freshly cooked rice, dal and seasonal vegetable curry from dinner buffet.',
-        instructions: 'Enter via rear kitchen loading dock and ask for Head Chef Ram.',
-        status: ClaimStatus.readyForPickup,
-      ),
-      _ClaimedDonation(
-        id: 'claim-2',
-        title: 'Freshly Baked Wholewheat Breads & Rolls',
-        donorName: 'Himalayan Bakers & Cafe',
-        donorPhone: '9801987654',
-        pickupAddress: 'Jhamsikhel, Lalitpur',
-        area: 'Jhamsikhel',
-        distanceKm: 2.8,
-        quantity: 15,
-        quantityUnit: 'Packs',
-        category: FoodCategory.veg,
-        claimCode: 'CLM-3319',
-        claimedAt: DateTime.now().subtract(const Duration(minutes: 30)),
-        pickupWindowMinutes: 60,
-        description: 'Packaged sandwich loaves, baguettes and dinner rolls baked this morning.',
-        instructions: 'Collect from bakery front counter. Present your Claim Code.',
-        status: ClaimStatus.readyForPickup,
-      ),
-      _ClaimedDonation(
-        id: 'claim-3',
-        title: 'Mixed Vegetable Pulao & Paneer Gravy',
-        donorName: 'Royal Banquet Hall',
-        donorPhone: '9851098765',
-        pickupAddress: 'Baluwatar, Kathmandu',
-        area: 'Baluwatar',
-        distanceKm: 3.5,
-        quantity: 30,
-        quantityUnit: 'Portions',
-        category: FoodCategory.veg,
-        claimCode: 'CLM-1094',
-        claimedAt: DateTime.now().subtract(const Duration(hours: 6)),
-        pickupWindowMinutes: 90,
-        description: 'Surplus food from afternoon reception. Stored in hot containers.',
-        instructions: 'Picked up and distributed at Central Community Kitchen.',
-        status: ClaimStatus.completed,
-      ),
-    ];
+    _claims = [];
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _fetchClaims();
+    });
+  }
+
+  Future<void> _fetchClaims() async {
+    final auth = context.read<AuthProvider>();
+    final token = auth.currentUser?.token;
+    if (token != null && token.isNotEmpty) {
+      await context.read<DonationProvider>().fetchClaims(token: token);
+    }
+    _loadDynamicClaims();
+  }
+
+  void _loadDynamicClaims() {
+    final donationProvider = context.read<DonationProvider>();
+    final List<_ClaimedDonation> dynamicClaims = [];
+
+    for (final raw in donationProvider.claims) {
+      if (raw is Map<String, dynamic>) {
+        final id = (raw['id'] ?? '').toString();
+        final donationData = raw['donation'] is Map<String, dynamic> ? raw['donation'] as Map<String, dynamic> : null;
+        final title = (raw['food_title'] ?? donationData?['title'] ?? 'Rescued Surplus Food').toString();
+        final donorName = (donationData?['donor_name'] ?? raw['donor_name'] ?? 'Verified Food Business').toString();
+        final donorPhone = (donationData?['donor_phone'] ?? raw['donor_phone'] ?? '').toString();
+        final pickupAddress = (donationData?['pickup_address'] ?? raw['pickup_address'] ?? 'Kathmandu').toString();
+        final code = (raw['manual_code'] ?? raw['qr_code'] ?? 'CLM-$id').toString();
+        final statusStr = (raw['status'] ?? '').toString().toUpperCase();
+        final isCompleted = statusStr == 'COMPLETED' || statusStr == 'PICKED_UP';
+
+        dynamicClaims.add(
+          _ClaimedDonation(
+            id: id,
+            title: title,
+            donorName: donorName,
+            donorPhone: donorPhone,
+            pickupAddress: pickupAddress,
+            area: pickupAddress.split(',').first.trim(),
+            distanceKm: double.tryParse(donationData?['distance_km']?.toString() ?? '1.2') ?? 1.2,
+            quantity: int.tryParse(donationData?['quantity']?.toString() ?? '10') ?? 10,
+            quantityUnit: (donationData?['quantity_unit'] ?? 'Portions').toString(),
+            category: FoodCategory.veg,
+            claimCode: code,
+            claimedAt: DateTime.tryParse(raw['created_at']?.toString() ?? '') ?? DateTime.now(),
+            pickupWindowMinutes: 45,
+            description: donationData?['description']?.toString() ?? 'Verified surplus food rescue.',
+            instructions: 'Show your Claim Code $code upon arrival for contactless verification.',
+            status: isCompleted ? ClaimStatus.completed : ClaimStatus.readyForPickup,
+          ),
+        );
+      }
+    }
+
+    setState(() {
+      _claims = dynamicClaims;
+    });
   }
 
   List<_ClaimedDonation> get _filteredClaims {
@@ -270,33 +275,14 @@ class _RecipientClaimedDonationsScreenState
           Expanded(
             child: claims.isEmpty
                 ? Center(
-                    child: Padding(
-                      padding: const EdgeInsets.all(32),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            Icons.inventory_2_outlined,
-                            size: 48,
-                            color: AppColors.textSecondary.withValues(alpha: 0.5),
-                          ),
-                          const SizedBox(height: 12),
-                          const Text(
-                            'No claimed donations found',
-                            style: TextStyle(
-                              fontSize: 15,
-                              fontWeight: FontWeight.bold,
-                              color: AppColors.textPrimary,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          const Text(
-                            'Claim surplus food listings from the Browse or Home tab to see them here.',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
-                          ),
-                        ],
-                      ),
+                    child: EmptyStateWidget(
+                      icon: Icons.volunteer_activism_outlined,
+                      title: 'No Claimed Food Donations',
+                      description:
+                          'Your organization has not claimed any surplus food donations yet. Browse priority listings to claim meals for your community.',
+                      buttonText: 'Refresh Claims',
+                      buttonIcon: Icons.refresh_rounded,
+                      onButtonPressed: _fetchClaims,
                     ),
                   )
                 : ListView.separated(
